@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { MemberStats, TIER_CONFIG, PointTier, Country } from '@/types';
+import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
 const FLAGS: Record<Country, string> = { Kenya: '🇰🇪', Rwanda: '🇷🇼', India: '🇮🇳', 'South Africa': '🇿🇦' };
 export default function DashboardPage() {
   const [stats, setStats] = useState<MemberStats[]>([]);
@@ -58,14 +59,14 @@ export default function DashboardPage() {
             <div style={{fontSize:48,marginBottom:8}}>🏁</div>
             <p style={{color:'#9ca3af',fontSize:13}}>No members yet — add members to get started</p>
           </div>
-        ) : active.slice(0,5).map((m,i)=>(
+        ) : active.slice(0,5).map((m,i)=>{ const rank=i+1; const sticker=getSticker(rank,active.length,m.memberId); const {bg,border}=STICKER_BG[getStickerTier(rank,active.length)]; return (
           <div key={m.memberId} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderRadius:10,marginBottom:4}}>
             <span style={{color:'#d1d5db',fontWeight:700,width:20,textAlign:'center',fontSize:13}}>{i===0?'👑':i+1}</span>
-            <div style={{width:36,height:36,borderRadius:'50%',background:'#1a7a4a',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:12}}>{m.memberName.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+            <div title={`${m.memberName} · ${STICKER_LABELS[sticker]??sticker}`} style={{width:36,height:36,borderRadius:'50%',background:bg,border:`2px solid ${border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>{sticker}</div>
             <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14,color:'#1f2937'}}>{m.memberName}</div><div style={{fontSize:11,color:'#9ca3af'}}>{FLAGS[m.country]} {m.country}</div></div>
             <div style={{textAlign:'right'}}><div style={{fontWeight:900,color:'#1a7a4a'}}>{m.totalPoints} pts</div><div style={{fontSize:11,color:'#9ca3af'}}>{m.activeDays} days</div></div>
           </div>
-        ))}
+        ); })}
       </div>
     </div>
   );
