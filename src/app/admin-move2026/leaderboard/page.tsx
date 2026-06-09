@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { MemberStats, Winner, PrizeCategory, TIER_CONFIG, PointTier, Country } from '@/types';
+import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
 
 const FLAGS: Record<Country, string> = { Kenya: '🇰🇪', Rwanda: '🇷🇼', India: '🇮🇳', 'South Africa': '🇿🇦' };
 
@@ -26,6 +27,7 @@ export default function AdminLeaderboardPage() {
   }, []);
 
   const active = stats.filter(s => s.isActive);
+  const rankMap = new Map(active.map((m, i) => [m.memberId, i + 1]));
   const tierGroups = (Object.entries(TIER_CONFIG) as [PointTier, typeof TIER_CONFIG[PointTier]][])
     .reverse().map(([key, cfg]) => ({ tier: key, cfg, members: active.filter(s => s.tier === key) })).filter(g => g.members.length > 0);
 
@@ -166,11 +168,15 @@ export default function AdminLeaderboardPage() {
                   <span style={{ fontSize: 11, color: '#9ca3af' }}>{cfg.min}{cfg.max ? `–${cfg.max}` : '+'} pts</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {members.map((m, i) => (
+                  {members.map((m, i) => {
+                    const rank = rankMap.get(m.memberId) ?? 0;
+                    const sticker = getSticker(rank, active.length, m.memberId);
+                    const { bg, border } = STICKER_BG[getStickerTier(rank, active.length)];
+                    return (
                     <div key={m.memberId} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f9fafb', borderRadius: 10, padding: '10px 12px' }}>
                       <span style={{ fontSize: 12, color: '#d1d5db', width: 16, textAlign: 'center', fontWeight: 700 }}>{tier === 'move_together_champions' && i === 0 ? '👑' : i + 1}</span>
-                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#1a7a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
-                        {m.memberName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                      <div title={`${m.memberName} · ${STICKER_LABELS[sticker] ?? sticker}`} style={{ width: 32, height: 32, borderRadius: '50%', background: bg, border: `2px solid ${border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                        {sticker}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 13, color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.memberName} <span>{FLAGS[m.country]}</span></div>
@@ -178,7 +184,7 @@ export default function AdminLeaderboardPage() {
                       </div>
                       <div style={{ fontWeight: 900, fontSize: 16, color: '#1a7a4a', flexShrink: 0 }}>{m.totalPoints}</div>
                     </div>
-                  ))}
+                  ); })}
                 </div>
               </div>
             ))
