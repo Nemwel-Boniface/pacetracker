@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Member, COUNTRIES, Country } from '@/types';
+import { getStickerByName, STICKER_LABELS } from '@/lib/stickers';
 const FLAGS: Record<Country, string> = { Kenya: '🇰🇪', Rwanda: '🇷🇼', India: '🇮🇳', 'South Africa': '🇿🇦' };
 const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box' as const };
 const btn = (bg: string) => ({ padding:'10px 20px', borderRadius:10, background:bg, color:'white', fontWeight:700, fontSize:13, border:'none', cursor:'pointer' });
@@ -59,7 +60,7 @@ export default function MembersPage() {
       : (<div style={{display:'flex',flexDirection:'column',gap:8}}>
         {filtered.map(m=>(
           <div key={m.id} style={{background:'white',borderRadius:16,padding:'14px 16px',border:'1px solid #f3f4f6',display:'flex',alignItems:'center',gap:14,opacity:m.isActive?1:0.6}}>
-            <div style={{width:40,height:40,borderRadius:'50%',background:m.isActive?'#1a7a4a':'#94a3b8',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:13,flexShrink:0}}>{m.avatarInitials}</div>
+            {(() => { const s = getStickerByName(m.name); return <div title={`${m.name} · ${STICKER_LABELS[s] ?? s}`} style={{width:40,height:40,borderRadius:'50%',background:m.isActive?'#f3e8ff':'#f3f4f6',border:`2px solid ${m.isActive?'#e9d5ff':'#e5e7eb'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,opacity:m.isActive?1:0.5}}>{s}</div>; })()}
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                 <span style={{fontWeight:700,color:'#1f2937'}}>{m.name}</span>
