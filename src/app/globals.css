@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root {
+  --eden-green: #1a7a4a;
+  --eden-green-light: #22a05e;
+  --eden-green-dark: #145c38;
+  --eden-orange: #f26522;
+}
+.gradient-eden { background: linear-gradient(135deg, #145c38 0%, #1a7a4a 60%, #f26522 100%); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
