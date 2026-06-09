@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { MemberStats, Winner, PrizeCategory, TIER_CONFIG, PointTier, Country } from '@/types';
+import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
 import Link from 'next/link';
 
 const FLAGS: Record<Country, string> = { Kenya: '🇰🇪', Rwanda: '🇷🇼', India: '🇮🇳', 'South Africa': '🇿🇦' };
@@ -24,6 +25,8 @@ export default function LeaderboardPage() {
 
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 60000); return () => clearInterval(t); }, [fetchData]);
 
+  const allActive = stats.filter(s => s.isActive);
+  const rankMap = new Map(allActive.map((m, i) => [m.memberId, i + 1]));
   const active = (filter === 'All' ? stats : stats.filter(s => s.country === filter)).filter(s => s.isActive);
   const tierGroups = (Object.entries(TIER_CONFIG) as [PointTier, typeof TIER_CONFIG[PointTier]][]).reverse()
     .map(([key, cfg]) => ({ tier: key, cfg, members: active.filter(s => s.tier === key) }));
@@ -117,9 +120,11 @@ export default function LeaderboardPage() {
                   {members.map((m, i) => (
                     <div key={m.memberId} style={{ background: 'white', borderRadius: 16, padding: '14px 16px', border: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 14 }}>
                       <span style={{ color: '#d1d5db', fontWeight: 700, fontSize: 13, width: 20, textAlign: 'center' }}>{tier === 'move_together_champions' && i === 0 ? '👑' : i+1}</span>
-                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#1a7a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
-                        {m.memberName.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()}
+                      {(() => { const rank = rankMap.get(m.memberId) ?? 0; const sticker = getSticker(rank, allActive.length, m.memberId); const { bg, border } = STICKER_BG[getStickerTier(rank, allActive.length)]; return (
+                      <div title={`${m.memberName} · ${STICKER_LABELS[sticker] ?? sticker}`} style={{ width: 44, height: 44, borderRadius: '50%', background: bg, border: `2px solid ${border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, cursor: 'default' }}>
+                        {sticker}
                       </div>
+                      ); })()}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.memberName} <span style={{ fontSize: 14 }}>{FLAGS[m.country]}</span></div>
                         <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>🏃 {m.runSessions} sessions · 📅 {m.activeDays} days{m.racesCompleted > 0 ? ` · 🏅 ${m.racesCompleted} race${m.racesCompleted !== 1 ? 's' : ''}` : ''}</div>
