@@ -1,24 +1,24 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { MemberStats, Winner, PrizeCategory, TIER_CONFIG, PointTier, Country } from '@/types';
+import { MemberStats, Winner, PrizeCategory, CountryConfig, TIER_CONFIG, PointTier, getCountryFlag } from '@/types';
 import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
 import Link from 'next/link';
-
-const FLAGS: Record<Country, string> = { Kenya: '🇰🇪', Rwanda: '🇷🇼', India: '🇮🇳', 'South Africa': '🇿🇦' };
 
 export default function LeaderboardPage() {
   const [stats, setStats] = useState<MemberStats[]>([]);
   const [winners, setWinners] = useState<Winner[]>([]);
   const [prizes, setPrizes] = useState<PrizeCategory[]>([]);
+  const [countries, setCountries] = useState<CountryConfig[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Country | 'All'>('All');
+  const [filter, setFilter] = useState<string>('All');
   const [lastUpdated, setLastUpdated] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/leaderboard');
-      const data = await res.json();
-      setStats(data.stats || []); setWinners(data.winners || []); setPrizes(data.prizes || []);
+      const [lbRes, ctRes] = await Promise.all([fetch('/api/leaderboard'), fetch('/api/countries')]);
+      const [lbData, ctData] = await Promise.all([lbRes.json(), ctRes.json()]);
+      setStats(lbData.stats || []); setWinners(lbData.winners || []); setPrizes(lbData.prizes || []);
+      setCountries((ctData.countries || []).filter((c: CountryConfig) => c.isActive));
       setLastUpdated(new Date().toLocaleTimeString());
     } catch { setStats([]); } finally { setLoading(false); }
   }, []);
@@ -40,7 +40,10 @@ export default function LeaderboardPage() {
               <div style={{ width: 32, height: 32, background: 'white', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🏃</div>
               <span style={{ fontWeight: 900, fontSize: 18 }}>PaceTracker</span>
             </div>
-            <Link href="/how-it-works" style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, textDecoration: 'underline' }}>How points work</Link>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <Link href="/authenticate" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, textDecoration: 'none', background: 'rgba(255,255,255,0.15)', padding: '6px 14px', borderRadius: 8, fontWeight: 600 }}>Sign In</Link>
+              <Link href="/how-it-works" style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, textDecoration: 'underline' }}>How points work</Link>
+            </div>
           </div>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Eden Care · #Move2026</p>
           <h1 style={{ fontSize: 36, fontWeight: 900, margin: '0 0 4px' }}>Move Together</h1>
@@ -65,7 +68,7 @@ export default function LeaderboardPage() {
               {winners.map(w => (
                 <div key={w.id} style={{ background: 'rgba(255,255,255,0.7)', borderRadius: 10, padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'center' }}>
                   <span style={{ fontSize: 24 }}>🏅</span>
-                  <div><div style={{ fontWeight: 700, fontSize: 13 }}>{w.memberName}</div><div style={{ fontSize: 11, color: '#b45309' }}>{w.prizeCategoryName}</div><div style={{ fontSize: 11, color: '#666' }}>{FLAGS[w.country]} {w.country}</div></div>
+                  <div><div style={{ fontWeight: 700, fontSize: 13 }}>{w.memberName}</div><div style={{ fontSize: 11, color: '#b45309' }}>{w.prizeCategoryName}</div><div style={{ fontSize: 11, color: '#666' }}>{getCountryFlag(w.country, countries)} {w.country}</div></div>
                 </div>
               ))}
             </div>
@@ -87,9 +90,10 @@ export default function LeaderboardPage() {
         )}
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto', paddingBottom: 4 }}>
-          {(['All','Kenya','Rwanda','India','South Africa'] as const).map(c => (
-            <button key={c} onClick={() => setFilter(c)} style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: filter === c ? 'none' : '1px solid #e5e7eb', background: filter === c ? '#1a7a4a' : 'white', color: filter === c ? 'white' : '#374151' }}>
-              {c !== 'All' && FLAGS[c as Country]} {c}
+          <button onClick={() => setFilter('All')} style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: filter === 'All' ? 'none' : '1px solid #e5e7eb', background: filter === 'All' ? '#1a7a4a' : 'white', color: filter === 'All' ? 'white' : '#374151' }}>All</button>
+          {countries.map(c => (
+            <button key={c.name} onClick={() => setFilter(c.name)} style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: filter === c.name ? 'none' : '1px solid #e5e7eb', background: filter === c.name ? '#1a7a4a' : 'white', color: filter === c.name ? 'white' : '#374151' }}>
+              {c.flag} {c.name}
             </button>
           ))}
           {lastUpdated && <span style={{ flexShrink: 0, fontSize: 11, color: '#9ca3af', alignSelf: 'center', marginLeft: 'auto' }}>Updated {lastUpdated}</span>}
@@ -126,7 +130,7 @@ export default function LeaderboardPage() {
                       </div>
                       ); })()}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.memberName} <span style={{ fontSize: 14 }}>{FLAGS[m.country]}</span></div>
+                        <div style={{ fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.memberName} <span style={{ fontSize: 14 }}>{getCountryFlag(m.country, countries)}</span></div>
                         <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>🏃 {m.runSessions} sessions · 📅 {m.activeDays} days{m.racesCompleted > 0 ? ` · 🏅 ${m.racesCompleted} race${m.racesCompleted !== 1 ? 's' : ''}` : ''}</div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
