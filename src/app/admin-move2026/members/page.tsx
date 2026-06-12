@@ -1,31 +1,45 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Member, COUNTRIES, Country } from '@/types';
+import { Member, CountryConfig, getCountryFlag } from '@/types';
 import { getStickerByName, STICKER_LABELS } from '@/lib/stickers';
-const FLAGS: Record<Country, string> = { Kenya: '🇰🇪', Rwanda: '🇷🇼', India: '🇮🇳', 'South Africa': '🇿🇦' };
+
 const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box' as const };
 const btn = (bg: string) => ({ padding:'10px 20px', borderRadius:10, background:bg, color:'white', fontWeight:700, fontSize:13, border:'none', cursor:'pointer' });
 
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
+  const [countries, setCountries] = useState<CountryConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name:'', email:'', country:'Kenya' as Country });
+  const [form, setForm] = useState({ name:'', email:'', country:'' });
   const [error, setError] = useState('');
-  useEffect(()=>{ fetch('/api/members').then(r=>r.json()).then(d=>setMembers(d.members||[])).catch(()=>setMembers([])).finally(()=>setLoading(false)); },[]);
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/members').then(r=>r.json()),
+      fetch('/api/countries').then(r=>r.json()),
+    ]).then(([md, cd]) => {
+      setMembers(md.members || []);
+      const active = (cd.countries || []).filter((c: CountryConfig) => c.isActive);
+      setCountries(active);
+      if (active.length > 0) setForm(f => ({ ...f, country: active[0].name }));
+    }).catch(()=>{}).finally(()=>setLoading(false));
+  }, []);
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setError('');
     try {
       const res = await fetch('/api/members',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)});
       const data = await res.json();
-      if (!res.ok){setError(data.error||'Failed');}else{setMembers(p=>[...p,data.member]);setForm({name:'',email:'',country:'Kenya'});setShowForm(false);}
+      if (!res.ok){setError(data.error||'Failed');}else{setMembers(p=>[...p,data.member]);setForm(f=>({name:'',email:'',country:f.country}));setShowForm(false);}
     } catch { setError('Connection error'); } finally { setSaving(false); }
   }
   async function handleToggle(id:string){ const res=await fetch('/api/members',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,action:'toggle'})}); const d=await res.json(); if(res.ok)setMembers(p=>p.map(m=>m.id===id?d.member:m)); }
   async function handleDelete(id:string,name:string){ if(!confirm(`Remove ${name}?`))return; await fetch(`/api/members?id=${id}`,{method:'DELETE'}); setMembers(p=>p.filter(m=>m.id!==id)); }
   const filtered = members.filter(m=>m.name.toLowerCase().includes(search.toLowerCase())||m.email.toLowerCase().includes(search.toLowerCase()));
+
   return (
     <div style={{padding:24,maxWidth:800,margin:'0 auto'}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
@@ -40,7 +54,9 @@ export default function MembersPage() {
               <div><label style={{display:'block',fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Full Name *</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Jane Wanjiku" required style={inp}/></div>
               <div><label style={{display:'block',fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Email</label><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="jane@edencaremedical.com" style={inp}/></div>
               <div><label style={{display:'block',fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Country</label>
-                <select value={form.country} onChange={e=>setForm({...form,country:e.target.value as Country})} style={inp}>{COUNTRIES.map(c=><option key={c} value={c}>{FLAGS[c]} {c}</option>)}</select>
+                <select value={form.country} onChange={e=>setForm({...form,country:e.target.value})} style={inp}>
+                  {countries.map(c=><option key={c.name} value={c.name}>{c.flag} {c.name}</option>)}
+                </select>
               </div>
             </div>
             {error && <div style={{background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',padding:'8px 12px',borderRadius:8,fontSize:13,marginBottom:12}}>{error}</div>}
@@ -64,7 +80,8 @@ export default function MembersPage() {
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                 <span style={{fontWeight:700,color:'#1f2937'}}>{m.name}</span>
-                <span>{FLAGS[m.country]}</span>
+                <span>{getCountryFlag(m.country, countries)}</span>
+                {m.selfRegistered && <span style={{fontSize:11,background:'#eff6ff',color:'#1d4ed8',padding:'2px 8px',borderRadius:999}}>Self-registered</span>}
                 {!m.isActive && <span style={{fontSize:11,background:'#f3f4f6',color:'#6b7280',padding:'2px 8px',borderRadius:999}}>Inactive</span>}
               </div>
               <div style={{fontSize:11,color:'#9ca3af',marginTop:2}}>{m.email||'No email'} · Joined {new Date(m.joinedAt).toLocaleDateString()}</div>

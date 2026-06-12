@@ -10,6 +10,7 @@ const NAV = [
   { href: '/admin-move2026/leaderboard', label: '🏆 Generate Board' },
   { href: '/admin-move2026/prizes', label: '🎁 Prizes' },
   { href: '/admin-move2026/winners', label: '🥇 Winners' },
+  { href: '/admin-move2026/settings', label: '⚙️ Settings' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
