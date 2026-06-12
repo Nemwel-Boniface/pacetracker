@@ -1,13 +1,18 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { ActivityLog, ActivityType, ACTIVITY_LABELS, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS } from '@/types';
 
 const MAX_PER_DAY = 2;
 const inp = { width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' };
-const numInp = { ...{ width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' } };
 
-function todayLabel() {
-  return new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+function todayUTC(): string { return new Date().toISOString().slice(0, 10); }
+function shiftDays(date: string, n: number): string {
+  const d = new Date(date + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function fmtDateLabel(date: string): string {
+  return new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 function activityMeta(a: ActivityLog): string {
@@ -19,24 +24,31 @@ function activityMeta(a: ActivityLog): string {
 }
 
 export default function MemberLogPage() {
-  const [todayActivities, setTodayActivities] = useState<ActivityLog[]>([]);
-  const [remaining, setRemaining] = useState(MAX_PER_DAY);
+  const today = useMemo(() => todayUTC(), []);
+  const dateOptions = useMemo(() => [
+    { date: today, label: 'Today' },
+    { date: shiftDays(today, -1), label: 'Yesterday' },
+    { date: shiftDays(today, -2), label: '2 days ago' },
+  ], [today]);
+
+  const [allActivities, setAllActivities] = useState<ActivityLog[]>([]);
+  const [selectedDate, setSelectedDate] = useState(today);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState({ activityType: 'run' as ActivityType, notes: '', distance: '', duration: '' });
 
-  async function fetchActivities() {
-    try {
-      const res = await fetch('/api/member/activities');
-      const data = await res.json();
-      setTodayActivities(data.todayActivities || []);
-      setRemaining(data.remaining ?? MAX_PER_DAY);
-    } catch { /* silent */ } finally { setLoading(false); }
-  }
+  useEffect(() => {
+    fetch('/api/member/activities')
+      .then(r => r.json())
+      .then(d => setAllActivities(d.activities || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  useEffect(() => { fetchActivities(); }, []);
+  const dateActivities = allActivities.filter(a => a.date === selectedDate);
+  const remaining = MAX_PER_DAY - dateActivities.length;
 
   async function handleLog(e: React.FormEvent) {
     e.preventDefault(); setError(''); setSuccess(''); setSaving(true);
@@ -44,6 +56,7 @@ export default function MemberLogPage() {
       const body = {
         activityType: form.activityType,
         notes: form.notes,
+        date: selectedDate,
         ...(form.distance ? { distance: parseFloat(form.distance) } : {}),
         ...(form.duration ? { duration: parseInt(form.duration) } : {}),
       };
@@ -52,25 +65,47 @@ export default function MemberLogPage() {
       if (!res.ok) { setError(data.error || 'Failed to log activity'); return; }
       setSuccess(`Logged! +${data.activity.points} point${data.activity.points !== 1 ? 's' : ''} 🎉`);
       setForm({ activityType: 'run', notes: '', distance: '', duration: '' });
-      setTodayActivities(p => [data.activity, ...p]);
-      setRemaining(data.remaining ?? 0);
+      setAllActivities(prev => [data.activity, ...prev]);
     } catch { setError('Connection error'); } finally { setSaving(false); }
   }
 
   const pts = ACTIVITY_POINTS[ACTIVITY_CATEGORY_MAP[form.activityType]];
+  const isToday = selectedDate === today;
 
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1f2937', margin: '0 0 4px' }}>Log Today&apos;s Activity</h2>
-        <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>{todayLabel()}</p>
+        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1f2937', margin: '0 0 4px' }}>Log an Activity</h2>
+        <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>Log for today or catch up on the last 2 days</p>
       </div>
 
+      {/* Date selector */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        {dateOptions.map(opt => {
+          const count = allActivities.filter(a => a.date === opt.date).length;
+          const full = count >= MAX_PER_DAY;
+          const active = selectedDate === opt.date;
+          return (
+            <button
+              key={opt.date}
+              onClick={() => { setSelectedDate(opt.date); setError(''); setSuccess(''); }}
+              style={{ flex: 1, padding: '10px 8px', borderRadius: 12, border: `2px solid ${active ? '#1a7a4a' : '#e5e7eb'}`, background: active ? '#f0fdf4' : 'white', cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s', position: 'relative' }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 800, color: active ? '#145c38' : '#374151' }}>{opt.label}</div>
+              <div style={{ fontSize: 11, color: active ? '#166534' : '#9ca3af', marginTop: 2 }}>{fmtDateLabel(opt.date)}</div>
+              {full && <div style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', marginTop: 3 }}>✓ Full</div>}
+              {!full && count > 0 && <div style={{ fontSize: 10, color: '#6b7280', marginTop: 3 }}>{count}/{MAX_PER_DAY} logged</div>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Slot indicators */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
         {Array.from({ length: MAX_PER_DAY }).map((_, i) => (
-          <div key={i} style={{ flex: 1, background: i < todayActivities.length ? '#1a7a4a' : '#f3f4f6', borderRadius: 10, padding: '12px 16px', textAlign: 'center', transition: 'all 0.3s' }}>
-            <div style={{ fontSize: 22 }}>{i < todayActivities.length ? '✅' : '⬜'}</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: i < todayActivities.length ? 'white' : '#9ca3af', marginTop: 4 }}>Activity {i + 1}</div>
+          <div key={i} style={{ flex: 1, background: i < dateActivities.length ? '#1a7a4a' : '#f3f4f6', borderRadius: 10, padding: '12px 16px', textAlign: 'center', transition: 'all 0.3s' }}>
+            <div style={{ fontSize: 22 }}>{i < dateActivities.length ? '✅' : '⬜'}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: i < dateActivities.length ? 'white' : '#9ca3af', marginTop: 4 }}>Activity {i + 1}</div>
           </div>
         ))}
       </div>
@@ -82,7 +117,7 @@ export default function MemberLogPage() {
       ) : remaining > 0 ? (
         <div style={{ background: 'white', borderRadius: 16, padding: 24, border: '1px solid #f3f4f6', marginBottom: 20 }}>
           <h3 style={{ fontWeight: 700, fontSize: 15, color: '#374151', margin: '0 0 16px' }}>
-            {remaining === MAX_PER_DAY ? 'Log your first activity' : 'Log one more activity'} ({remaining} remaining today)
+            {remaining === MAX_PER_DAY ? 'Log an activity' : 'Log one more'} for {isToday ? 'today' : fmtDateLabel(selectedDate)} ({remaining} slot{remaining !== 1 ? 's' : ''} left)
           </h3>
           <form onSubmit={handleLog}>
             <div style={{ marginBottom: 14 }}>
@@ -94,11 +129,11 @@ export default function MemberLogPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Distance — km <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
-                <input type="number" min="0" step="0.1" value={form.distance} onChange={e => setForm({ ...form, distance: e.target.value })} placeholder="e.g. 5.2" style={numInp} />
+                <input type="number" min="0" step="0.1" value={form.distance} onChange={e => setForm({ ...form, distance: e.target.value })} placeholder="e.g. 5.2" style={inp} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Duration — min <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
-                <input type="number" min="1" step="1" value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} placeholder="e.g. 32" style={numInp} />
+                <input type="number" min="1" step="1" value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} placeholder="e.g. 32" style={inp} />
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
@@ -118,17 +153,21 @@ export default function MemberLogPage() {
       ) : (
         <div style={{ background: '#f0fdf4', border: '2px solid #86efac', borderRadius: 16, padding: 28, marginBottom: 20, textAlign: 'center' }}>
           <div style={{ fontSize: 48, marginBottom: 8 }}>🎉</div>
-          <h3 style={{ fontWeight: 900, color: '#145c38', fontSize: 18, margin: '0 0 4px' }}>All done for today!</h3>
-          <p style={{ color: '#166534', fontSize: 14, margin: 0 }}>You&apos;ve logged your {MAX_PER_DAY} activities for today. Come back tomorrow!</p>
+          <h3 style={{ fontWeight: 900, color: '#145c38', fontSize: 18, margin: '0 0 4px' }}>
+            {isToday ? 'All done for today!' : `${fmtDateLabel(selectedDate)} is fully logged!`}
+          </h3>
+          <p style={{ color: '#166534', fontSize: 14, margin: 0 }}>
+            {isToday ? `You've logged your ${MAX_PER_DAY} activities for today. Come back tomorrow!` : `Both activities have been logged for this day.`}
+          </p>
         </div>
       )}
 
-      {todayActivities.length > 0 && (
+      {dateActivities.length > 0 && (
         <div style={{ background: 'white', borderRadius: 16, border: '1px solid #f3f4f6', overflow: 'hidden' }}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid #f3f4f6', fontWeight: 700, fontSize: 14, color: '#374151' }}>
-            Today&apos;s Logged Activities
+            {isToday ? 'Today' : fmtDateLabel(selectedDate)}&apos;s Activities
           </div>
-          {todayActivities.map(a => {
+          {dateActivities.map(a => {
             const meta = activityMeta(a);
             return (
               <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 20px', borderBottom: '1px solid #fafafa' }}>
