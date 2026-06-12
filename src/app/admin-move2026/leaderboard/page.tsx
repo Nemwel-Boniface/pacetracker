@@ -1,9 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { MemberStats, Winner, PrizeCategory, TIER_CONFIG, PointTier, Country } from '@/types';
+import { MemberStats, Winner, PrizeCategory, CountryConfig, TIER_CONFIG, PointTier, getCountryFlag } from '@/types';
 import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
-
-const FLAGS: Record<Country, string> = { Kenya: '🇰🇪', Rwanda: '🇷🇼', India: '🇮🇳', 'South Africa': '🇿🇦' };
 
 function fmtDate(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -16,13 +14,14 @@ export default function AdminLeaderboardPage() {
   const [stats, setStats] = useState<MemberStats[]>([]);
   const [winners, setWinners] = useState<Winner[]>([]);
   const [prizes, setPrizes] = useState<PrizeCategory[]>([]);
+  const [countries, setCountries] = useState<CountryConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [date, setDate] = useState(yesterday());
 
   useEffect(() => {
-    fetch('/api/leaderboard').then(r => r.json())
-      .then(d => { setStats(d.stats || []); setWinners((d.winners || []).filter((w: Winner) => w.isVisible)); setPrizes((d.prizes || []).filter((p: PrizeCategory) => p.isVisible)); })
+    Promise.all([fetch('/api/leaderboard'), fetch('/api/countries')]).then(([lr, cr]) => Promise.all([lr.json(), cr.json()]))
+      .then(([d, cd]) => { setStats(d.stats || []); setWinners((d.winners || []).filter((w: Winner) => w.isVisible)); setPrizes((d.prizes || []).filter((p: PrizeCategory) => p.isVisible)); setCountries(cd.countries || []); })
       .catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -179,7 +178,7 @@ export default function AdminLeaderboardPage() {
                         {sticker}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.memberName} <span>{FLAGS[m.country]}</span></div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.memberName} <span>{getCountryFlag(m.country, countries)}</span></div>
                         <div style={{ fontSize: 10, color: '#9ca3af' }}>{m.activeDays} days active · {m.runSessions} sessions</div>
                       </div>
                       <div style={{ fontWeight: 900, fontSize: 16, color: '#1a7a4a', flexShrink: 0 }}>{m.totalPoints}</div>

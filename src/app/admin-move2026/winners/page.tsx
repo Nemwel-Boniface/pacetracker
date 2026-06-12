@@ -1,20 +1,20 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Winner, PrizeCategory, MemberStats, Country } from '@/types';
-const FLAGS: Record<Country, string> = { Kenya: '🇰🇪', Rwanda: '🇷🇼', India: '🇮🇳', 'South Africa': '🇿🇦' };
+import { Winner, PrizeCategory, MemberStats, CountryConfig, getCountryFlag } from '@/types';
 const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box' as const };
 export default function WinnersPage() {
   const [winners, setWinners] = useState<Winner[]>([]);
   const [prizes, setPrizes] = useState<PrizeCategory[]>([]);
   const [stats, setStats] = useState<MemberStats[]>([]);
+  const [countries, setCountries] = useState<CountryConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ prizeCategoryId:'', memberId:'', isVisible:false });
   const [error, setError] = useState('');
   useEffect(()=>{
-    Promise.all([fetch('/api/winners').then(r=>r.json()),fetch('/api/prizes').then(r=>r.json()),fetch('/api/leaderboard').then(r=>r.json())])
-      .then(([w,p,l])=>{ setWinners(w.winners||[]); setPrizes(p.prizes||[]); setStats(l.stats||[]); }).catch(()=>{}).finally(()=>setLoading(false));
+    Promise.all([fetch('/api/winners').then(r=>r.json()),fetch('/api/prizes').then(r=>r.json()),fetch('/api/leaderboard').then(r=>r.json()),fetch('/api/countries').then(r=>r.json())])
+      .then(([w,p,l,cd])=>{ setWinners(w.winners||[]); setPrizes(p.prizes||[]); setStats(l.stats||[]); setCountries(cd.countries||[]); }).catch(()=>{}).finally(()=>setLoading(false));
   },[]);
   async function handleCreate(e:React.FormEvent) {
     e.preventDefault(); setSaving(true); setError('');
@@ -49,7 +49,7 @@ export default function WinnersPage() {
                 <select value={form.prizeCategoryId} onChange={e=>setForm({...form,prizeCategoryId:e.target.value})} required style={inp}><option value="">Select prize...</option>{prizes.map(p=><option key={p.id} value={p.id}>{p.name}{p.amount>0?` ($${p.amount})`:''}</option>)}</select>
               </div>
               <div><label style={{display:'block',fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Winner *</label>
-                <select value={form.memberId} onChange={e=>setForm({...form,memberId:e.target.value})} required style={inp}><option value="">Select member...</option>{stats.filter(s=>s.isActive).map(s=><option key={s.memberId} value={s.memberId}>{FLAGS[s.country]} {s.memberName} ({s.totalPoints}pts)</option>)}</select>
+                <select value={form.memberId} onChange={e=>setForm({...form,memberId:e.target.value})} required style={inp}><option value="">Select member...</option>{stats.filter(s=>s.isActive).map(s=><option key={s.memberId} value={s.memberId}>{getCountryFlag(s.country, countries)} {s.memberName} ({s.totalPoints}pts)</option>)}</select>
               </div>
             </div>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}><input type="checkbox" id="wvis" checked={form.isVisible} onChange={e=>setForm({...form,isVisible:e.target.checked})}/><label htmlFor="wvis" style={{fontSize:13,color:'#374151'}}>Show on public leaderboard immediately</label></div>
@@ -72,7 +72,7 @@ export default function WinnersPage() {
                 <div>
                   <div style={{fontWeight:700,color:'#1f2937'}}>{w.memberName}</div>
                   <div style={{fontSize:13,fontWeight:600,color:'#f26522'}}>{w.prizeCategoryName}</div>
-                  <div style={{fontSize:11,color:'#9ca3af'}}>{FLAGS[w.country]} {w.country}</div>
+                  <div style={{fontSize:11,color:'#9ca3af'}}>{getCountryFlag(w.country, countries)} {w.country}</div>
                 </div>
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
