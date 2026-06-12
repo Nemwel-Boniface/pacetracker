@@ -32,13 +32,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Daily limit reached — you can log up to ${MAX_PER_DAY} activities per day` }, { status: 429 });
     }
 
-    const { activityType, notes } = await req.json();
+    const { activityType, notes, distance, duration } = await req.json();
     if (!activityType) return NextResponse.json({ error: 'activityType required' }, { status: 400 });
     const category = ACTIVITY_CATEGORY_MAP[activityType as ActivityType] || 'run_session';
     const activity: ActivityLog = {
       id: uuidv4(), memberId: member.id, memberName: member.name,
       activityType, category, date: today,
       notes: notes?.trim() || undefined,
+      distance: distance != null && Number(distance) > 0 ? Math.round(Number(distance) * 10) / 10 : undefined,
+      duration: duration != null && Number(duration) > 0 ? Math.round(Number(duration)) : undefined,
       points: ACTIVITY_POINTS[category],
       loggedAt: new Date().toISOString(),
     };
