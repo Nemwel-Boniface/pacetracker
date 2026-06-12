@@ -1,7 +1,8 @@
 import { getRedis, KEYS } from './redis';
-import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier } from '@/types';
+import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
+// ─── Members ────────────────────────────────────────────────────────────────
 export async function getAllMembers(): Promise<Member[]> {
   const r = getRedis(); const ids = await r.smembers(KEYS.members);
   if (!ids?.length) return [];
@@ -10,11 +11,29 @@ export async function getAllMembers(): Promise<Member[]> {
 }
 export async function getMember(id: string): Promise<Member | null> { return getRedis().get<Member>(KEYS.member(id)); }
 export async function saveMember(m: Member): Promise<void> { const r = getRedis(); await r.set(KEYS.member(m.id), m); await r.sadd(KEYS.members, m.id); }
-export async function deleteMember(id: string): Promise<void> { const r = getRedis(); await r.del(KEYS.member(id)); await r.srem(KEYS.members, id); }
+export async function deleteMember(id: string): Promise<void> {
+  const r = getRedis();
+  const m = await getMember(id);
+  if (m?.email) await r.hdel(KEYS.emailIndex, m.email.toLowerCase());
+  await r.del(KEYS.member(id)); await r.srem(KEYS.members, id);
+}
 export async function toggleMemberActive(id: string): Promise<Member | null> {
   const m = await getMember(id); if (!m) return null; m.isActive = !m.isActive; await saveMember(m); return m;
 }
+export function sanitizeMember(m: Member): Omit<Member, 'passwordHash'> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { passwordHash, ...safe } = m; return safe;
+}
 
+// ─── Email index ─────────────────────────────────────────────────────────────
+export async function getMemberIdByEmail(email: string): Promise<string | null> {
+  return getRedis().hget<string>(KEYS.emailIndex, email.toLowerCase());
+}
+export async function setEmailIndex(email: string, memberId: string): Promise<void> {
+  await getRedis().hset(KEYS.emailIndex, { [email.toLowerCase()]: memberId });
+}
+
+// ─── Activities ──────────────────────────────────────────────────────────────
 export async function logActivity(a: ActivityLog): Promise<void> {
   const r = getRedis();
   await r.set(KEYS.activity(a.id), a);
@@ -39,6 +58,10 @@ export async function getMemberActivities(memberId: string): Promise<ActivityLog
   const acts = await Promise.all(ids.map(id => r.get<ActivityLog>(KEYS.activity(id))));
   return (acts.filter(Boolean) as ActivityLog[]).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
+export async function getMemberActivitiesForDate(memberId: string, date: string): Promise<ActivityLog[]> {
+  const all = await getActivitiesForDate(date);
+  return all.filter(a => a.memberId === memberId);
+}
 export async function getAllActivities(): Promise<ActivityLog[]> {
   const r = getRedis(); const ids = await r.smembers(KEYS.activities);
   if (!ids?.length) return [];
@@ -46,6 +69,7 @@ export async function getAllActivities(): Promise<ActivityLog[]> {
   return (acts.filter(Boolean) as ActivityLog[]).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
+// ─── Stats ───────────────────────────────────────────────────────────────────
 export async function computeMemberStats(memberId: string): Promise<MemberStats | null> {
   const member = await getMember(memberId); if (!member) return null;
   const activities = await getMemberActivities(memberId);
@@ -67,6 +91,7 @@ export async function getAllMemberStats(): Promise<MemberStats[]> {
   return (stats.filter(Boolean) as MemberStats[]).sort((a,b) => b.totalPoints - a.totalPoints);
 }
 
+// ─── Prizes ──────────────────────────────────────────────────────────────────
 export async function getAllPrizes(): Promise<PrizeCategory[]> {
   const r = getRedis(); const ids = await r.smembers(KEYS.prizes);
   if (!ids?.length) return [];
@@ -76,6 +101,7 @@ export async function getAllPrizes(): Promise<PrizeCategory[]> {
 export async function savePrize(p: PrizeCategory): Promise<void> { const r = getRedis(); await r.set(KEYS.prize(p.id), p); await r.sadd(KEYS.prizes, p.id); }
 export async function deletePrize(id: string): Promise<void> { const r = getRedis(); await r.del(KEYS.prize(id)); await r.srem(KEYS.prizes, id); }
 
+// ─── Winners ─────────────────────────────────────────────────────────────────
 export async function getAllWinners(): Promise<Winner[]> {
   const r = getRedis(); const ids = await r.smembers(KEYS.winners);
   if (!ids?.length) return [];
@@ -86,3 +112,41 @@ export async function saveWinner(w: Winner): Promise<void> { const r = getRedis(
 export async function deleteWinner(id: string): Promise<void> { const r = getRedis(); await r.del(KEYS.winner(id)); await r.srem(KEYS.winners, id); }
 export async function getVisibleWinners(): Promise<Winner[]> { return (await getAllWinners()).filter(w => w.isVisible); }
 export async function getVisiblePrizes(): Promise<PrizeCategory[]> { return (await getAllPrizes()).filter(p => p.isVisible); }
+
+// ─── Countries ───────────────────────────────────────────────────────────────
+function countrySlug(name: string): string { return name.toLowerCase().replace(/\s+/g, '_'); }
+
+async function seedDefaultCountries(): Promise<void> {
+  for (const c of DEFAULT_COUNTRIES) { await saveCountry(c); }
+}
+
+export async function getAllCountries(): Promise<CountryConfig[]> {
+  const r = getRedis();
+  const slugs = await r.smembers(KEYS.countries);
+  if (!slugs?.length) { await seedDefaultCountries(); return [...DEFAULT_COUNTRIES].sort((a,b) => a.name.localeCompare(b.name)); }
+  const configs = await Promise.all(slugs.map(slug => r.get<CountryConfig>(KEYS.country(slug))));
+  return (configs.filter(Boolean) as CountryConfig[]).sort((a,b) => a.name.localeCompare(b.name));
+}
+
+export async function getActiveCountries(): Promise<CountryConfig[]> {
+  return (await getAllCountries()).filter(c => c.isActive);
+}
+
+export async function saveCountry(c: CountryConfig): Promise<void> {
+  const r = getRedis(); const slug = countrySlug(c.name);
+  await r.set(KEYS.country(slug), c); await r.sadd(KEYS.countries, slug);
+}
+
+export async function toggleCountry(name: string): Promise<CountryConfig | null> {
+  const slug = countrySlug(name);
+  const c = await getRedis().get<CountryConfig>(KEYS.country(slug));
+  if (!c) return null; c.isActive = !c.isActive; await saveCountry(c); return c;
+}
+
+export async function deleteCountry(name: string): Promise<void> {
+  const r = getRedis(); const slug = countrySlug(name);
+  await r.del(KEYS.country(slug)); await r.srem(KEYS.countries, slug);
+}
+
+// Re-export for convenience
+export { uuidv4, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS };
