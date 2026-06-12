@@ -16,10 +16,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!await getAdminSession()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    const { memberId, memberName, activityType, date, notes } = await req.json();
+    const { memberId, memberName, activityType, date, notes, distance, duration } = await req.json();
     if (!memberId || !activityType || !date) return NextResponse.json({ error: 'memberId, activityType, and date required' }, { status: 400 });
     const category = ACTIVITY_CATEGORY_MAP[activityType as keyof typeof ACTIVITY_CATEGORY_MAP] || 'run_session';
-    const activity: ActivityLog = { id: uuidv4(), memberId, memberName, activityType, category, date, notes: notes?.trim() || undefined, points: ACTIVITY_POINTS[category], loggedAt: new Date().toISOString() };
+    const activity: ActivityLog = { id: uuidv4(), memberId, memberName, activityType, category, date, notes: notes?.trim() || undefined, distance: distance != null && Number(distance) > 0 ? Math.round(Number(distance) * 10) / 10 : undefined, duration: duration != null && Number(duration) > 0 ? Math.round(Number(duration)) : undefined, points: ACTIVITY_POINTS[category], loggedAt: new Date().toISOString() };
     await logActivity(activity); return NextResponse.json({ activity }, { status: 201 });
   } catch { return NextResponse.json({ error: 'Failed to log activity' }, { status: 500 }); }
 }
