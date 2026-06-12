@@ -5,6 +5,7 @@ import { ActivityLog, ACTIVITY_POINTS, ACTIVITY_CATEGORY_MAP } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function GET(req: NextRequest) {
+  if (!await getAdminSession()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const sp = new URL(req.url).searchParams;
   const date = sp.get('date'); const memberId = sp.get('memberId');
   try {

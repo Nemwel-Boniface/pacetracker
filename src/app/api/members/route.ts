@@ -5,6 +5,7 @@ import { Member } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function GET() {
+  if (!await getAdminSession()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try { const members = await getAllMembers(); return NextResponse.json({ members: members.map(sanitizeMember) }); }
   catch { return NextResponse.json({ members: [] }); }
 }
