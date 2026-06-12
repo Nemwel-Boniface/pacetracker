@@ -15,4 +15,8 @@ export const KEYS = {
   prize: (id: string) => `pt:prize:${id}`,
   winners: 'pt:winners',
   winner: (id: string) => `pt:winner:${id}`,
+  countries: 'pt:countries',
+  country: (slug: string) => `pt:country:${slug}`,
+  emailIndex: 'pt:email:index',
+  resetToken: (token: string) => `pt:reset:${token}`,
 };

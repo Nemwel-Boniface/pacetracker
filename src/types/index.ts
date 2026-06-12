@@ -1,9 +1,10 @@
-export type Country = 'Kenya' | 'Rwanda' | 'India' | 'South Africa';
+export type Country = string;
 export type ActivityType = 'run' | 'walk' | 'hike' | 'cycling' | 'yoga' | 'swimming' | 'cardio' | 'gym_leg_day' | 'gym_upper_body' | 'gym_full_body' | 'compound_workout' | 'lunch_walk' | 'lunch_stretch' | 'lunch_mobility' | 'other';
 export type ActivityCategory = 'run_session' | 'lunch_time_activity' | 'race_signup' | 'race_complete';
 export type PointTier = 'getting_started' | 'building_momentum' | 'consistency_crew' | 'move_together_champions';
 
-export interface Member { id: string; name: string; email: string; country: Country; isActive: boolean; joinedAt: string; avatarInitials: string; }
+export interface CountryConfig { name: string; flag: string; isActive: boolean; }
+export interface Member { id: string; name: string; email: string; country: Country; isActive: boolean; joinedAt: string; avatarInitials: string; passwordHash?: string; selfRegistered?: boolean; }
 export interface ActivityLog { id: string; memberId: string; memberName: string; activityType: ActivityType; category: ActivityCategory; date: string; notes?: string; points: number; loggedAt: string; }
 export interface MemberStats { memberId: string; memberName: string; country: Country; totalPoints: number; tier: PointTier; runSessions: number; lunchActivities: number; raceSignups: number; racesCompleted: number; activeDays: number; lastActive?: string; isActive: boolean; }
 export interface PrizeCategory { id: string; name: string; amount: number; description: string; criteria: string; isVisible: boolean; createdAt: string; }
@@ -24,4 +25,43 @@ export function getTier(points: number): PointTier {
   if (points >= 11) return 'building_momentum';
   return 'getting_started';
 }
-export const COUNTRIES: Country[] = ['Kenya', 'Rwanda', 'India', 'South Africa'];
+export function getCountryFlag(country: string, configs: CountryConfig[]): string {
+  return configs.find(c => c.name === country)?.flag || '🌍';
+}
+export const DEFAULT_COUNTRIES: CountryConfig[] = [
+  { name: 'Kenya', flag: '🇰🇪', isActive: true },
+  { name: 'Rwanda', flag: '🇷🇼', isActive: true },
+  { name: 'South Africa', flag: '🇿🇦', isActive: true },
+  { name: 'India', flag: '🇮🇳', isActive: true },
+  { name: 'Uganda', flag: '🇺🇬', isActive: false },
+  { name: 'Tanzania', flag: '🇹🇿', isActive: false },
+  { name: 'Ethiopia', flag: '🇪🇹', isActive: false },
+  { name: 'Ghana', flag: '🇬🇭', isActive: false },
+  { name: 'Nigeria', flag: '🇳🇬', isActive: false },
+  { name: 'Egypt', flag: '🇪🇬', isActive: false },
+  { name: 'Morocco', flag: '🇲🇦', isActive: false },
+  { name: 'Senegal', flag: '🇸🇳', isActive: false },
+  { name: 'Cameroon', flag: '🇨🇲', isActive: false },
+  { name: 'Zimbabwe', flag: '🇿🇼', isActive: false },
+  { name: 'Zambia', flag: '🇿🇲', isActive: false },
+  { name: 'Mozambique', flag: '🇲🇿', isActive: false },
+  { name: 'Botswana', flag: '🇧🇼', isActive: false },
+  { name: 'Namibia', flag: '🇳🇦', isActive: false },
+  { name: 'Malawi', flag: '🇲🇼', isActive: false },
+  { name: 'Madagascar', flag: '🇲🇬', isActive: false },
+  { name: 'Mauritius', flag: '🇲🇺', isActive: false },
+  { name: 'Tunisia', flag: '🇹🇳', isActive: false },
+  { name: 'Algeria', flag: '🇩🇿', isActive: false },
+  { name: 'Angola', flag: '🇦🇴', isActive: false },
+  { name: 'DRC', flag: '🇨🇩', isActive: false },
+  { name: 'Ivory Coast', flag: '🇨🇮', isActive: false },
+  { name: 'Togo', flag: '🇹🇬', isActive: false },
+  { name: 'Burundi', flag: '🇧🇮', isActive: false },
+  { name: 'Lesotho', flag: '🇱🇸', isActive: false },
+  { name: 'Eswatini', flag: '🇸🇿', isActive: false },
+  { name: 'Djibouti', flag: '🇩🇯', isActive: false },
+  { name: 'Eritrea', flag: '🇪🇷', isActive: false },
+  { name: 'Somalia', flag: '🇸🇴', isActive: false },
+  { name: 'Sudan', flag: '🇸🇩', isActive: false },
+  { name: 'Seychelles', flag: '🇸🇨', isActive: false },
+];
