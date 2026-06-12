@@ -1,10 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { CountryConfig } from '@/types';
 
 const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const };
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [countries, setCountries] = useState<CountryConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
@@ -13,6 +15,22 @@ export default function SettingsPage() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [purgeInput, setPurgeInput] = useState('');
+  const [purging, setPurging] = useState(false);
+  const [purged, setPurged] = useState(false);
+
+  async function handlePurge() {
+    if (purgeInput !== 'PURGE') return;
+    setPurging(true);
+    try {
+      const res = await fetch('/api/admin/purge', { method: 'DELETE' });
+      if (!res.ok) { alert('Purge failed — please try again.'); return; }
+      setPurged(true);
+      setTimeout(() => router.push('/admin-move2026/dashboard'), 3000);
+    } catch { alert('Connection error'); } finally { setPurging(false); }
+  }
 
   useEffect(() => {
     fetch('/api/countries').then(r => r.json()).then(d => setCountries(d.countries || [])).catch(() => {}).finally(() => setLoading(false));
@@ -133,6 +151,65 @@ export default function SettingsPage() {
           </div>
         </>
       )}
+      {/* ─── Danger Zone ─── */}
+      <div style={{ marginTop: 40, border: '2px solid #fecaca', borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ background: '#fef2f2', padding: '16px 24px', borderBottom: purgeOpen ? '1px solid #fecaca' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#991b1b' }}>⚠️ Danger Zone</div>
+            <div style={{ fontSize: 13, color: '#b91c1c', marginTop: 2 }}>Irreversible actions that affect all data</div>
+          </div>
+          <button onClick={() => { setPurgeOpen(!purgeOpen); setPurgeInput(''); }} style={{ padding: '8px 16px', borderRadius: 10, background: '#dc2626', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>
+            {purgeOpen ? 'Cancel' : '🗑️ Purge All Data'}
+          </button>
+        </div>
+
+        {purgeOpen && (
+          <div style={{ padding: 24, background: 'white' }}>
+            {purged ? (
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                <div style={{ fontWeight: 900, fontSize: 18, color: '#1f2937', marginBottom: 4 }}>All data purged</div>
+                <div style={{ color: '#6b7280', fontSize: 14 }}>Redirecting to dashboard in 3 seconds…</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '14px 18px', marginBottom: 20 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#991b1b', marginBottom: 10 }}>This will permanently delete:</div>
+                  <ul style={{ margin: 0, paddingLeft: 20, color: '#b91c1c', fontSize: 13, lineHeight: 2 }}>
+                    <li>All member accounts and self-registrations</li>
+                    <li>All activity logs and points</li>
+                    <li>All prizes and winners</li>
+                    <li>All feedback tickets</li>
+                    <li>All country configurations (auto-reseed on next load)</li>
+                  </ul>
+                  <div style={{ marginTop: 10, fontSize: 13, color: '#166534', fontWeight: 600 }}>✓ Admin login is not affected — credentials live in environment variables.</div>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 8 }}>
+                    Type <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: 4, color: '#dc2626', fontWeight: 900 }}>PURGE</code> to confirm
+                  </label>
+                  <input
+                    value={purgeInput}
+                    onChange={e => setPurgeInput(e.target.value)}
+                    placeholder="Type PURGE here"
+                    style={{ ...inp, maxWidth: 240, borderColor: purgeInput === 'PURGE' ? '#16a34a' : '#e5e7eb', color: '#1f2937', fontWeight: 700, letterSpacing: '0.05em' }}
+                    autoFocus
+                  />
+                </div>
+
+                <button
+                  onClick={handlePurge}
+                  disabled={purgeInput !== 'PURGE' || purging}
+                  style={{ padding: '11px 24px', borderRadius: 10, background: purgeInput === 'PURGE' && !purging ? '#dc2626' : '#9ca3af', color: 'white', fontWeight: 800, fontSize: 14, border: 'none', cursor: purgeInput === 'PURGE' && !purging ? 'pointer' : 'not-allowed' }}
+                >
+                  {purging ? 'Purging…' : '🗑️ Yes, delete everything'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
