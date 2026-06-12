@@ -4,9 +4,18 @@ import { ActivityLog, ActivityType, ACTIVITY_LABELS, ACTIVITY_CATEGORY_MAP, ACTI
 
 const MAX_PER_DAY = 2;
 const inp = { width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' };
+const numInp = { ...{ width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' } };
 
 function todayLabel() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function activityMeta(a: ActivityLog): string {
+  return [
+    a.distance != null ? `${a.distance}km` : null,
+    a.duration != null ? `${a.duration}min` : null,
+    a.notes || null,
+  ].filter(Boolean).join(' · ');
 }
 
 export default function MemberLogPage() {
@@ -16,7 +25,7 @@ export default function MemberLogPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [form, setForm] = useState({ activityType: 'run' as ActivityType, notes: '' });
+  const [form, setForm] = useState({ activityType: 'run' as ActivityType, notes: '', distance: '', duration: '' });
 
   async function fetchActivities() {
     try {
@@ -32,11 +41,17 @@ export default function MemberLogPage() {
   async function handleLog(e: React.FormEvent) {
     e.preventDefault(); setError(''); setSuccess(''); setSaving(true);
     try {
-      const res = await fetch('/api/member/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const body = {
+        activityType: form.activityType,
+        notes: form.notes,
+        ...(form.distance ? { distance: parseFloat(form.distance) } : {}),
+        ...(form.duration ? { duration: parseInt(form.duration) } : {}),
+      };
+      const res = await fetch('/api/member/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to log activity'); return; }
       setSuccess(`Logged! +${data.activity.points} point${data.activity.points !== 1 ? 's' : ''} 🎉`);
-      setForm({ activityType: 'run', notes: '' });
+      setForm({ activityType: 'run', notes: '', distance: '', duration: '' });
       setTodayActivities(p => [data.activity, ...p]);
       setRemaining(data.remaining ?? 0);
     } catch { setError('Connection error'); } finally { setSaving(false); }
@@ -76,9 +91,19 @@ export default function MemberLogPage() {
                 {Object.entries(ACTIVITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Distance — km <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
+                <input type="number" min="0" step="0.1" value={form.distance} onChange={e => setForm({ ...form, distance: e.target.value })} placeholder="e.g. 5.2" style={numInp} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Duration — min <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
+                <input type="number" min="1" step="1" value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} placeholder="e.g. 32" style={numInp} />
+              </div>
+            </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Notes (optional)</label>
-              <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="e.g. 5km in 32 min, ran with the team…" style={inp} />
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Notes <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
+              <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="e.g. ran with the team, morning session…" style={inp} />
             </div>
             <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
               This awards <strong>{pts} point{pts !== 1 ? 's' : ''}</strong> toward your total 🏅
@@ -103,16 +128,19 @@ export default function MemberLogPage() {
           <div style={{ padding: '14px 20px', borderBottom: '1px solid #f3f4f6', fontWeight: 700, fontSize: 14, color: '#374151' }}>
             Today&apos;s Logged Activities
           </div>
-          {todayActivities.map(a => (
-            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 20px', borderBottom: '1px solid #fafafa' }}>
-              <span style={{ fontSize: 22 }}>{ACTIVITY_LABELS[a.activityType]?.split(' ')[0] || '✨'}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937' }}>{ACTIVITY_LABELS[a.activityType]}</div>
-                {a.notes && <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{a.notes}</div>}
+          {todayActivities.map(a => {
+            const meta = activityMeta(a);
+            return (
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 20px', borderBottom: '1px solid #fafafa' }}>
+                <span style={{ fontSize: 22 }}>{ACTIVITY_LABELS[a.activityType]?.split(' ')[0] || '✨'}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937' }}>{ACTIVITY_LABELS[a.activityType]}</div>
+                  {meta && <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{meta}</div>}
+                </div>
+                <span style={{ fontWeight: 900, color: '#1a7a4a', fontSize: 14 }}>+{a.points} pt{a.points !== 1 ? 's' : ''}</span>
               </div>
-              <span style={{ fontWeight: 900, color: '#1a7a4a', fontSize: 14 }}>+{a.points} pt{a.points !== 1 ? 's' : ''}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

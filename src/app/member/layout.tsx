@@ -19,6 +19,7 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
 
   const tabs = [
     { href: '/member', label: '🏆 Leaderboard', exact: true },
+    { href: '/member/stats', label: '📊 My Stats' },
     { href: '/member/log', label: '➕ Log Activity' },
     { href: '/member/how-it-works', label: '📖 How It Works' },
   ];
