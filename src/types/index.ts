@@ -10,6 +10,18 @@ export interface MemberStats { memberId: string; memberName: string; country: Co
 export interface PrizeCategory { id: string; name: string; amount: number; description: string; criteria: string; isVisible: boolean; createdAt: string; }
 export interface Winner { id: string; prizeCategoryId: string; prizeCategoryName: string; memberId: string; memberName: string; country: Country; isVisible: boolean; announcedAt: string; }
 
+export type FeedbackCategory = 'suggestion' | 'bug' | 'question' | 'other';
+export type FeedbackStatus = 'pending' | 'acknowledged' | 'in_progress' | 'done';
+export interface Feedback { id: string; memberId: string; memberName: string; message: string; category: FeedbackCategory; status: FeedbackStatus; adminComment?: string; submittedAt: string; updatedAt?: string; }
+
+export const FEEDBACK_CATEGORY_LABELS: Record<FeedbackCategory, string> = { suggestion: '💡 Suggestion', bug: '🐛 Bug Report', question: '❓ Question', other: '💬 General' };
+export const FEEDBACK_STATUS_CONFIG: Record<FeedbackStatus, { label: string; bg: string; color: string }> = {
+  pending: { label: 'Received', bg: '#fef9c3', color: '#854d0e' },
+  acknowledged: { label: 'Seen by Rhino', bg: '#dbeafe', color: '#1e40af' },
+  in_progress: { label: 'In Progress', bg: '#ffedd5', color: '#9a3412' },
+  done: { label: 'Done ✅', bg: '#dcfce7', color: '#14532d' },
+};
+
 export const ACTIVITY_POINTS: Record<ActivityCategory, number> = { run_session: 2, lunch_time_activity: 1, race_signup: 5, race_complete: 10 };
 export const ACTIVITY_CATEGORY_MAP: Record<ActivityType, ActivityCategory> = { run: 'run_session', walk: 'run_session', hike: 'run_session', cycling: 'run_session', swimming: 'run_session', cardio: 'run_session', gym_leg_day: 'run_session', gym_upper_body: 'run_session', gym_full_body: 'run_session', compound_workout: 'run_session', yoga: 'run_session', lunch_walk: 'lunch_time_activity', lunch_stretch: 'lunch_time_activity', lunch_mobility: 'lunch_time_activity', other: 'run_session' };
 export const ACTIVITY_LABELS: Record<ActivityType, string> = { run: '🏃 Run', walk: '🚶 Walk', hike: '🥾 Hike', cycling: '🚴 Cycling', swimming: '🏊 Swimming', cardio: '💪 Cardio', gym_leg_day: '🦵 Gym – Leg Day', gym_upper_body: '💪 Gym – Upper Body', gym_full_body: '🏋️ Gym – Full Body', compound_workout: '⚡ Compound Workout', yoga: '🧘 Yoga', lunch_walk: '🍃 Lunch Walk', lunch_stretch: '🤸 Lunch Stretch', lunch_mobility: '🔄 Lunch Mobility', other: '✨ Other' };

@@ -19,4 +19,7 @@ export const KEYS = {
   country: (slug: string) => `pt:country:${slug}`,
   emailIndex: 'pt:email:index',
   resetToken: (token: string) => `pt:reset:${token}`,
+  feedback: 'pt:feedback',
+  feedbackItem: (id: string) => `pt:fb:${id}`,
+  memberFeedback: (memberId: string) => `pt:mfb:${memberId}`,
 };
