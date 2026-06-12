@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Member, ActivityLog, ActivityType, ACTIVITY_LABELS, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, Country } from '@/types';
-const FLAGS: Record<Country, string> = { Kenya: '🇰🇪', Rwanda: '🇷🇼', India: '🇮🇳', 'South Africa': '🇿🇦' };
+import { Member, ActivityLog, ActivityType, CountryConfig, ACTIVITY_LABELS, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getCountryFlag } from '@/types';
+
 const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box' as const };
 function today() { return new Date().toISOString().slice(0,10); }
 function yesterday() { const d=new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); }
@@ -9,6 +9,7 @@ function fmtDate(d:string) { return new Date(d+'T12:00:00').toLocaleDateString('
 
 export default function ActivitiesPage() {
   const [members, setMembers] = useState<Member[]>([]);
+  const [countries, setCountries] = useState<CountryConfig[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState(yesterday());
@@ -16,8 +17,19 @@ export default function ActivitiesPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ memberId:'', activityType:'run' as ActivityType, notes:'' });
   const [error, setError] = useState('');
-  useEffect(()=>{ fetch('/api/members').then(r=>r.json()).then(d=>setMembers((d.members||[]).filter((m:Member)=>m.isActive))).catch(()=>setMembers([])); },[]);
+
+  useEffect(()=>{
+    Promise.all([
+      fetch('/api/members').then(r=>r.json()),
+      fetch('/api/countries').then(r=>r.json()),
+    ]).then(([md, cd])=>{
+      setMembers((md.members||[]).filter((m:Member)=>m.isActive));
+      setCountries(cd.countries || []);
+    }).catch(()=>{});
+  },[]);
+
   useEffect(()=>{ setLoading(true); fetch(`/api/activities?date=${date}`).then(r=>r.json()).then(d=>setActivities(d.activities||[])).catch(()=>setActivities([])).finally(()=>setLoading(false)); },[date]);
+
   async function handleLog(e:React.FormEvent) {
     e.preventDefault(); if(!form.memberId){setError('Select a member');return;} setSaving(true); setError('');
     const member=members.find(m=>m.id===form.memberId);
@@ -29,6 +41,7 @@ export default function ActivitiesPage() {
   }
   async function handleDelete(id:string){if(!confirm('Remove this activity?'))return;await fetch(`/api/activities?id=${id}`,{method:'DELETE'});setActivities(p=>p.filter(a=>a.id!==id));}
   const pts=ACTIVITY_POINTS[ACTIVITY_CATEGORY_MAP[form.activityType]];
+
   return (
     <div style={{padding:24,maxWidth:800,margin:'0 auto'}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
@@ -54,7 +67,7 @@ export default function ActivitiesPage() {
                 <label style={{display:'block',fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Member *</label>
                 <select value={form.memberId} onChange={e=>setForm({...form,memberId:e.target.value})} style={inp}>
                   <option value="">Select member...</option>
-                  {members.map(m=><option key={m.id} value={m.id}>{FLAGS[m.country]} {m.name}</option>)}
+                  {members.map(m=><option key={m.id} value={m.id}>{getCountryFlag(m.country, countries)} {m.name}</option>)}
                 </select>
               </div>
               <div>
