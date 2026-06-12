@@ -75,21 +75,27 @@ export default function MembersPage() {
       : filtered.length===0 ? <div style={{textAlign:'center',padding:'4rem',background:'white',borderRadius:16,border:'1px solid #f3f4f6'}}><div style={{fontSize:48,marginBottom:12}}>👥</div><h3 style={{fontWeight:700,color:'#374151',marginBottom:4}}>{search?'No members found':'No members yet'}</h3><p style={{color:'#9ca3af',fontSize:13}}>{search?'Try a different search':'Click "Add Member" to register the first participant'}</p></div>
       : (<div style={{display:'flex',flexDirection:'column',gap:8}}>
         {filtered.map(m=>(
-          <div key={m.id} style={{background:'white',borderRadius:16,padding:'14px 16px',border:'1px solid #f3f4f6',display:'flex',alignItems:'center',gap:14,opacity:m.isActive?1:0.6}}>
-            {(() => { const s = getStickerByName(m.name); return <div title={`${m.name} · ${STICKER_LABELS[s] ?? s}`} style={{width:40,height:40,borderRadius:'50%',background:m.isActive?'#f3e8ff':'#f3f4f6',border:`2px solid ${m.isActive?'#e9d5ff':'#e5e7eb'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,opacity:m.isActive?1:0.5}}>{s}</div>; })()}
+          <div key={m.id} style={{background: m.isAdminMember ? '#f0fdf4' : 'white', borderRadius:16,padding:'14px 16px',border: m.isAdminMember ? '1px solid #86efac' : '1px solid #f3f4f6',display:'flex',alignItems:'center',gap:14,opacity:m.isActive?1:0.6}}>
+            {m.isAdminMember
+              ? <div title="Nemwel Boniface · Creator 🦏" style={{width:40,height:40,borderRadius:'50%',background:'#dcfce7',border:'2px solid #16a34a',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>🦏</div>
+              : (() => { const s = getStickerByName(m.name); return <div title={`${m.name} · ${STICKER_LABELS[s] ?? s}`} style={{width:40,height:40,borderRadius:'50%',background:m.isActive?'#f3e8ff':'#f3f4f6',border:`2px solid ${m.isActive?'#e9d5ff':'#e5e7eb'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,opacity:m.isActive?1:0.5}}>{s}</div>; })()
+            }
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                 <span style={{fontWeight:700,color:'#1f2937'}}>{m.name}</span>
                 <span>{getCountryFlag(m.country, countries)}</span>
-                {m.selfRegistered && <span style={{fontSize:11,background:'#eff6ff',color:'#1d4ed8',padding:'2px 8px',borderRadius:999}}>Self-registered</span>}
+                {m.isAdminMember && <span style={{fontSize:11,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:999,fontWeight:700}}>🦏 Admin</span>}
+                {m.selfRegistered && !m.isAdminMember && <span style={{fontSize:11,background:'#eff6ff',color:'#1d4ed8',padding:'2px 8px',borderRadius:999}}>Self-registered</span>}
                 {!m.isActive && <span style={{fontSize:11,background:'#f3f4f6',color:'#6b7280',padding:'2px 8px',borderRadius:999}}>Inactive</span>}
               </div>
               <div style={{fontSize:11,color:'#9ca3af',marginTop:2}}>{m.email||'No email'} · Joined {new Date(m.joinedAt).toLocaleDateString()}</div>
             </div>
-            <div style={{display:'flex',gap:8,flexShrink:0}}>
-              <button onClick={()=>handleToggle(m.id)} title={m.isActive?'Deactivate':'Activate'} style={{background:'transparent',border:'none',cursor:'pointer',fontSize:20}}>{m.isActive?'🟢':'⚫'}</button>
-              <button onClick={()=>handleDelete(m.id,m.name)} title="Remove" style={{background:'transparent',border:'none',cursor:'pointer',fontSize:18}}>🗑️</button>
-            </div>
+            {!m.isAdminMember && (
+              <div style={{display:'flex',gap:8,flexShrink:0}}>
+                <button onClick={()=>handleToggle(m.id)} title={m.isActive?'Deactivate':'Activate'} style={{background:'transparent',border:'none',cursor:'pointer',fontSize:20}}>{m.isActive?'🟢':'⚫'}</button>
+                <button onClick={()=>handleDelete(m.id,m.name)} title="Remove" style={{background:'transparent',border:'none',cursor:'pointer',fontSize:18}}>🗑️</button>
+              </div>
+            )}
           </div>
         ))}
       </div>)}

@@ -3,7 +3,27 @@ import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig,
 import { v4 as uuidv4 } from 'uuid';
 
 // ─── Members ────────────────────────────────────────────────────────────────
+export const ADMIN_MEMBER_ID = 'pt-admin-member';
+
+const ADMIN_MEMBER_SEED: Member = {
+  id: ADMIN_MEMBER_ID,
+  name: 'Nemwel Boniface',
+  email: 'n.nyandoro@edencaremedical.com',
+  country: 'Kenya',
+  isActive: true,
+  joinedAt: '2024-01-01T00:00:00.000Z',
+  avatarInitials: 'NB',
+  isAdminMember: true,
+};
+
+async function ensureAdminMember(): Promise<void> {
+  const r = getRedis();
+  const exists = await r.sismember(KEYS.members, ADMIN_MEMBER_ID);
+  if (!exists) await saveMember(ADMIN_MEMBER_SEED);
+}
+
 export async function getAllMembers(): Promise<Member[]> {
+  await ensureAdminMember();
   const r = getRedis(); const ids = await r.smembers(KEYS.members);
   if (!ids?.length) return [];
   const members = await Promise.all(ids.map(id => r.get<Member>(KEYS.member(id))));
@@ -12,6 +32,7 @@ export async function getAllMembers(): Promise<Member[]> {
 export async function getMember(id: string): Promise<Member | null> { return getRedis().get<Member>(KEYS.member(id)); }
 export async function saveMember(m: Member): Promise<void> { const r = getRedis(); await r.set(KEYS.member(m.id), m); await r.sadd(KEYS.members, m.id); }
 export async function deleteMember(id: string): Promise<void> {
+  if (id === ADMIN_MEMBER_ID) return;
   const r = getRedis();
   const m = await getMember(id);
   if (m?.email) await r.hdel(KEYS.emailIndex, m.email.toLowerCase());
