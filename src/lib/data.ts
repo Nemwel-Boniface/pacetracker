@@ -1,5 +1,5 @@
 import { getRedis, KEYS } from './redis';
-import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier } from '@/types';
+import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
 // ─── Members ────────────────────────────────────────────────────────────────
@@ -146,6 +146,31 @@ export async function toggleCountry(name: string): Promise<CountryConfig | null>
 export async function deleteCountry(name: string): Promise<void> {
   const r = getRedis(); const slug = countrySlug(name);
   await r.del(KEYS.country(slug)); await r.srem(KEYS.countries, slug);
+}
+
+// ─── Feedback ────────────────────────────────────────────────────────────────
+export async function getAllFeedback(): Promise<Feedback[]> {
+  const r = getRedis(); const ids = await r.smembers(KEYS.feedback);
+  if (!ids?.length) return [];
+  const items = await Promise.all(ids.map(id => r.get<Feedback>(KEYS.feedbackItem(id))));
+  return (items.filter(Boolean) as Feedback[]).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+}
+export async function getMemberFeedback(memberId: string): Promise<Feedback[]> {
+  const r = getRedis(); const ids = await r.smembers(KEYS.memberFeedback(memberId));
+  if (!ids?.length) return [];
+  const items = await Promise.all(ids.map(id => r.get<Feedback>(KEYS.feedbackItem(id))));
+  return (items.filter(Boolean) as Feedback[]).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+}
+export async function saveFeedback(fb: Feedback): Promise<void> {
+  const r = getRedis();
+  await Promise.all([r.set(KEYS.feedbackItem(fb.id), fb), r.sadd(KEYS.feedback, fb.id), r.sadd(KEYS.memberFeedback(fb.memberId), fb.id)]);
+}
+export async function updateFeedback(id: string, patch: Partial<Feedback>): Promise<Feedback | null> {
+  const r = getRedis(); const fb = await r.get<Feedback>(KEYS.feedbackItem(id));
+  if (!fb) return null;
+  const updated = { ...fb, ...patch };
+  await r.set(KEYS.feedbackItem(id), updated);
+  return updated;
 }
 
 // Re-export for convenience
