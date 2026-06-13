@@ -1,14 +1,80 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { MemberStats, Winner, PrizeCategory, CountryConfig, TIER_CONFIG, PointTier, getCountryFlag } from '@/types';
 import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
+
+type SlackMsgType = 'leaders' | 'reminder' | 'combined';
 
 function fmtDate(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
+function fmtDateLong(d: string) {
+  return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
 
 function today() { return new Date().toISOString().slice(0, 10); }
 function yesterday() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); }
+
+const LEADERBOARD_LINK = 'https://pacetracker-move2026.vercel.app/leaderboard';
+
+function buildLeadersMessage(active: MemberStats[], date: string, prizes: PrizeCategory[]): string {
+  const top = active.slice(0, 5);
+  const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+  const topLines = top.length > 0
+    ? top.map((m, i) => `${medals[i]} *${m.memberName}* — ${m.totalPoints} pts | ${m.activeDays} active day${m.activeDays !== 1 ? 's' : ''} | ${m.runSessions} session${m.runSessions !== 1 ? 's' : ''}`).join('\n')
+    : '_No activity logged yet — be the first!_';
+  const totalPoints = active.reduce((s, m) => s + m.totalPoints, 0);
+  const totalDays = active.reduce((s, m) => s + m.activeDays, 0);
+  const prizeNote = prizes.length > 0
+    ? `\n🎁 *Prizes up for grabs:* ${prizes.map(p => p.amount > 0 ? `${p.name} ($${p.amount})` : p.name).join(', ')}`
+    : '';
+
+  return `🏆 *Move Together Leaderboard Update — ${fmtDateLong(date)}*
+
+Here's where we stand on the Eden Care #Move2026 challenge!
+
+${topLines}
+
+📊 *Challenge Snapshot:*
+• ${active.length} participant${active.length !== 1 ? 's' : ''} moving together
+• ${totalPoints} total points earned
+• ${totalDays} total active days logged${prizeNote}
+
+Every step counts — keep pushing! 💪
+
+👉 *Full leaderboard:* ${LEADERBOARD_LINK}`;
+}
+
+function buildReminderMessage(active: MemberStats[], date: string): string {
+  const dateLabel = fmtDateLong(date);
+  const count = active.length;
+  const peerNote = count > 0
+    ? `${count} of your teammates are already on the leaderboard`
+    : 'The challenge is now live';
+
+  return `👋 *Hey Move Together crew — ${dateLabel}!*
+
+${peerNote} — are you in? 🏃
+
+*Log your activity today and:*
+✅ Build healthy movement habits with your colleagues
+✅ Earn points for every workout — even a 20-min lunch walk counts!
+✅ Compete in the 8-Week Couch to 10K challenge
+✅ Win prizes for top performers
+✅ Stay accountable and motivated with your whole team
+✅ Track your own personal stats and progress week by week
+
+*Already a member?* Log today's activity and keep your streak alive! 🔥
+*Not signed up yet?* Create your free account now and join the fun!
+
+🔗 ${LEADERBOARD_LINK}
+
+_You can log up to 2 activities per day, and even catch up on the last 2 days if you missed a log!_ 💙`;
+}
+
+function buildCombinedMessage(active: MemberStats[], date: string, prizes: PrizeCategory[]): string {
+  return buildLeadersMessage(active, date, prizes) + '\n\n---\n\n' + buildReminderMessage(active, date);
+}
 
 export default function AdminLeaderboardPage() {
   const [stats, setStats] = useState<MemberStats[]>([]);
@@ -18,6 +84,8 @@ export default function AdminLeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [date, setDate] = useState(yesterday());
+  const [msgType, setMsgType] = useState<SlackMsgType>('leaders');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     Promise.all([fetch('/api/leaderboard'), fetch('/api/countries')]).then(([lr, cr]) => Promise.all([lr.json(), cr.json()]))
@@ -29,6 +97,19 @@ export default function AdminLeaderboardPage() {
   const rankMap = new Map(active.map((m, i) => [m.memberId, i + 1]));
   const tierGroups = (Object.entries(TIER_CONFIG) as [PointTier, typeof TIER_CONFIG[PointTier]][])
     .reverse().map(([key, cfg]) => ({ tier: key, cfg, members: active.filter(s => s.tier === key) })).filter(g => g.members.length > 0);
+
+  const slackMessage = useMemo(() => {
+    if (msgType === 'leaders') return buildLeadersMessage(active, date, prizes);
+    if (msgType === 'reminder') return buildReminderMessage(active, date);
+    return buildCombinedMessage(active, date, prizes);
+  }, [msgType, active, date, prizes]);
+
+  function copyToClipboard() {
+    navigator.clipboard.writeText(slackMessage).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  }
 
   async function generateImage() {
     setGenerating(true);
@@ -97,7 +178,54 @@ export default function AdminLeaderboardPage() {
       </div>
 
       <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 12, color: '#1e40af' }}>
-        💡 <strong>Daily routine:</strong> Each morning at 8am, set the date to yesterday, then download and post the PNG image in your team channel.
+        💡 <strong>Daily routine:</strong> Each morning, set the date to yesterday → copy the Slack message → post in #Move2026 → then download and attach the PNG image.
+      </div>
+
+      {/* Slack Message Generator */}
+      <div style={{ background: 'white', borderRadius: 16, padding: 20, border: '1px solid #f3f4f6', marginBottom: 20 }}>
+        <div style={{ marginBottom: 14 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1f2937', margin: 0 }}>Slack Message Generator</h2>
+          <p style={{ color: '#6b7280', fontSize: 12, margin: '4px 0 0' }}>
+            Dynamic messages ready to copy and paste directly into #Move2026 — updates automatically when you change the date above.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+          {([
+            { key: 'leaders', label: '🏆 Leaderboard Update' },
+            { key: 'reminder', label: '👋 Daily Reminder' },
+            { key: 'combined', label: '📢 Full Update' },
+          ] as { key: SlackMsgType; label: string }[]).map(({ key, label }) => (
+            <button key={key} onClick={() => { setMsgType(key); setCopied(false); }} style={{
+              padding: '8px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: msgType === key ? 700 : 500,
+              border: `2px solid ${msgType === key ? '#1a7a4a' : '#e5e7eb'}`,
+              background: msgType === key ? '#f0fdf4' : 'white',
+              color: msgType === key ? '#1a7a4a' : '#374151',
+            }}>{label}</button>
+          ))}
+        </div>
+
+        <div style={{ position: 'relative' }}>
+          <textarea readOnly value={slackMessage} style={{
+            width: '100%', minHeight: msgType === 'combined' ? 340 : 220, padding: '12px 14px',
+            border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 12, fontFamily: 'ui-monospace, monospace',
+            color: '#374151', background: '#f9fafb', resize: 'vertical', lineHeight: 1.7, boxSizing: 'border-box',
+            outline: 'none',
+          }} />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ fontSize: 11, color: '#9ca3af' }}>
+            Ready to paste in Slack · uses Slack markdown (*bold*, _italic_) · link included
+          </span>
+          <button onClick={copyToClipboard} style={{
+            padding: '9px 20px', borderRadius: 8, fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer',
+            background: copied ? '#16a34a' : '#1a7a4a', color: 'white',
+            transition: 'background 0.2s',
+          }}>
+            {copied ? '✅ Copied!' : '📋 Copy to Clipboard'}
+          </button>
+        </div>
       </div>
 
       {/* Leaderboard preview — this is what gets captured */}
