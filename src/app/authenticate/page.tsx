@@ -20,6 +20,14 @@ export default function AuthenticatePage() {
   const [resetToken, setResetToken] = useState('');
 
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem('pt_member_creds');
+      if (saved) {
+        const { email, password } = JSON.parse(saved);
+        if (email && password) setLogin({ email, password });
+      }
+    } catch { /* ignore */ }
+
     fetch('/api/countries').then(r => r.json()).then(d => {
       const active = (d.countries || []).filter((c: CountryConfig) => c.isActive);
       setCountries(active);
@@ -35,6 +43,7 @@ export default function AuthenticatePage() {
       const res = await fetch('/api/auth/member/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(login) });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Login failed'); return; }
+      try { localStorage.setItem('pt_member_creds', JSON.stringify(login)); } catch { /* ignore */ }
       router.push('/member');
     } catch { setError('Connection error'); } finally { setLoading(false); }
   }
@@ -48,6 +57,7 @@ export default function AuthenticatePage() {
       const res = await fetch('/api/auth/member/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: signup.name, email: signup.email, password: signup.password, country: signup.country }) });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Registration failed'); return; }
+      try { localStorage.setItem('pt_member_creds', JSON.stringify({ email: signup.email, password: signup.password })); } catch { /* ignore */ }
       router.push('/member');
     } catch { setError('Connection error'); } finally { setLoading(false); }
   }
