@@ -3,18 +3,28 @@ import { useEffect, useState } from 'react';
 import { MemberStats, CountryConfig, TIER_CONFIG, PointTier, getCountryFlag } from '@/types';
 import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
 
+interface StreakDay { date: string; hasActivity: boolean; isToday: boolean; }
+interface Milestone { days: number; label: string; emoji: string; achieved: boolean; }
+interface MyStreak {
+  currentStreak: number; longestStreak: number; isActiveToday: boolean;
+  totalActiveDays: number; recentDays: StreakDay[]; milestones: Milestone[];
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<MemberStats[]>([]);
   const [countries, setCountries] = useState<CountryConfig[]>([]);
   const [loading, setLoading] = useState(true);
+  const [myStreak, setMyStreak] = useState<MyStreak | null>(null);
 
   useEffect(() => {
     Promise.all([
       fetch('/api/leaderboard').then(r=>r.json()),
       fetch('/api/countries').then(r=>r.json()),
-    ]).then(([ld, cd]) => {
+      fetch('/api/admin/my-streak').then(r=>r.json()),
+    ]).then(([ld, cd, sd]) => {
       setStats(ld.stats || []);
       setCountries(cd.countries || []);
+      if (!sd.error) setMyStreak(sd);
     }).catch(()=>{}).finally(()=>setLoading(false));
   }, []);
 
@@ -38,6 +48,46 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+      {myStreak && (
+        <div style={{background:'white',borderRadius:16,padding:20,border:'1px solid #f3f4f6',marginBottom:20}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:8}}>
+            <h2 style={{fontWeight:700,color:'#374151',fontSize:15,margin:0}}>🔥 My Streak</h2>
+            <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,fontWeight:600,background:myStreak.isActiveToday?'#dcfce7':'#fef9c3',color:myStreak.isActiveToday?'#16a34a':'#92400e'}}>
+              {myStreak.isActiveToday ? '✅ Logged today' : '⚠️ Not logged today'}
+            </span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
+            {[['🔥','Current Streak',`${myStreak.currentStreak}d`],['🏆','Longest Streak',`${myStreak.longestStreak}d`],['📅','Total Active Days',`${myStreak.totalActiveDays}d`]].map(([e,l,v])=>(
+              <div key={l} style={{background:'#f9fafb',borderRadius:10,padding:'12px 8px',textAlign:'center'}}>
+                <div style={{fontSize:20,marginBottom:4}}>{e}</div>
+                <div style={{fontSize:20,fontWeight:900,color:'#1f2937'}}>{v}</div>
+                <div style={{fontSize:10,color:'#9ca3af',marginTop:2,lineHeight:1.3}}>{l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>Last 30 Days</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(15,1fr)',gap:3}}>
+              {myStreak.recentDays.map(day=>(
+                <div key={day.date} title={day.date} style={{aspectRatio:'1',borderRadius:4,background:day.hasActivity?'#16a34a':'#f3f4f6',border:day.isToday?'2px solid #f26522':'2px solid transparent',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:day.hasActivity?'white':'transparent'}}>✓</div>
+              ))}
+            </div>
+          </div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {myStreak.milestones.map(m=>(
+              <div key={m.days} title={`${m.label} — ${m.days}-day streak`} style={{display:'flex',alignItems:'center',gap:4,padding:'4px 10px',borderRadius:20,background:m.achieved?'#f0fdf4':'#f9fafb',border:`1px solid ${m.achieved?'#bbf7d0':'#f3f4f6'}`,opacity:m.achieved?1:0.45,fontSize:11,fontWeight:600,color:m.achieved?'#166534':'#9ca3af'}}>
+                <span style={{filter:m.achieved?'none':'grayscale(1)'}}>{m.emoji}</span> {m.label}
+              </div>
+            ))}
+          </div>
+          {(() => { const next = myStreak.milestones.find(m=>!m.achieved); return next ? (
+            <div style={{marginTop:12,background:'#fffbeb',border:'1px solid #fde68a',borderRadius:8,padding:'8px 12px',fontSize:12,color:'#92400e'}}>
+              🎯 <strong>{next.days - myStreak.currentStreak} more day{next.days - myStreak.currentStreak !== 1 ? 's' : ''}</strong> to unlock <strong>{next.label}</strong> {next.emoji}
+            </div>
+          ) : null; })()}
+        </div>
+      )}
+
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:16,marginBottom:20}}>
         <div style={{background:'white',borderRadius:16,padding:20,border:'1px solid #f3f4f6'}}>
           <h2 style={{fontWeight:700,color:'#374151',marginBottom:16,fontSize:15}}>📈 Progress Tiers</h2>
