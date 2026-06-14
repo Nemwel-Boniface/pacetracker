@@ -65,10 +65,10 @@ ${peerNote} — are you in? 🏃
 ✅ Stay accountable and motivated with your whole team
 ✅ Track your own personal stats and progress week by week
 
-*Already a member?* Log today's activity and keep your streak alive! 🔥
-*Not signed up yet?* Create your free account now and join the fun!
+*Already a member?* → Log in to the platform and record today's activity to keep your streak alive! 🔥
+*Not on the challenge yet?* → Sign up for free in under a minute — your teammates are already moving!
 
-🔗 ${LEADERBOARD_LINK}
+🔗 *Log in or create your account here:* ${LEADERBOARD_LINK}
 
 _You can log up to 2 activities per day, and even catch up on the last 2 days if you missed a log!_ 💙`;
 }
