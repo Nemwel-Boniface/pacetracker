@@ -42,7 +42,8 @@ ${topLines}
 
 Every step counts — keep pushing! 💪
 
-👉 *Full leaderboard:* ${LEADERBOARD_LINK}`;
+👉 *Want to see who's currently topping the ranks — and be first to know when gifts are announced and awarded?* Check the live leaderboard:
+${LEADERBOARD_LINK}`;
 }
 
 function buildReminderMessage(active: MemberStats[], date: string): string {
