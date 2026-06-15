@@ -1,9 +1,13 @@
 import { getRedis, KEYS } from './redis';
 import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
 
 // ─── Members ────────────────────────────────────────────────────────────────
 export const ADMIN_MEMBER_ID = 'pt-admin-member';
+export const SHADOW_MEMBER_ID = 'pt-shadow-member';
+export const SHADOW_MEMBER_EMAIL = process.env.SHADOW_MEMBER_EMAIL || 'shadow@pacetracker.test';
+const SHADOW_MEMBER_PASSWORD = process.env.SHADOW_MEMBER_PASSWORD || 'Move2026test!';
 
 const ADMIN_MEMBER_SEED: Member = {
   id: ADMIN_MEMBER_ID,
@@ -22,8 +26,30 @@ async function ensureAdminMember(): Promise<void> {
   if (!exists) await saveMember(ADMIN_MEMBER_SEED);
 }
 
+async function ensureShadowMember(): Promise<void> {
+  const r = getRedis();
+  const exists = await r.sismember(KEYS.members, SHADOW_MEMBER_ID);
+  if (!exists) {
+    const passwordHash = await bcrypt.hash(SHADOW_MEMBER_PASSWORD, 10);
+    const shadow: Member = {
+      id: SHADOW_MEMBER_ID,
+      name: 'Test User',
+      email: SHADOW_MEMBER_EMAIL,
+      country: 'Kenya',
+      isActive: true,
+      joinedAt: '2024-01-01T00:00:00.000Z',
+      avatarInitials: 'TU',
+      isShadowUser: true,
+      passwordHash,
+    };
+    await saveMember(shadow);
+    await setEmailIndex(SHADOW_MEMBER_EMAIL, SHADOW_MEMBER_ID);
+  }
+}
+
 export async function getAllMembers(): Promise<Member[]> {
   await ensureAdminMember();
+  await ensureShadowMember();
   const r = getRedis(); const ids = await r.smembers(KEYS.members);
   if (!ids?.length) return [];
   const members = await Promise.all(ids.map(id => r.get<Member>(KEYS.member(id))));
@@ -32,7 +58,7 @@ export async function getAllMembers(): Promise<Member[]> {
 export async function getMember(id: string): Promise<Member | null> { return getRedis().get<Member>(KEYS.member(id)); }
 export async function saveMember(m: Member): Promise<void> { const r = getRedis(); await r.set(KEYS.member(m.id), m); await r.sadd(KEYS.members, m.id); }
 export async function deleteMember(id: string): Promise<void> {
-  if (id === ADMIN_MEMBER_ID) return;
+  if (id === ADMIN_MEMBER_ID || id === SHADOW_MEMBER_ID) return;
   const r = getRedis();
   const m = await getMember(id);
   if (m?.email) await r.hdel(KEYS.emailIndex, m.email.toLowerCase());
@@ -111,7 +137,8 @@ export async function computeMemberStats(memberId: string): Promise<MemberStats 
 }
 export async function getAllMemberStats(): Promise<MemberStats[]> {
   const members = await getAllMembers(); if (!members.length) return [];
-  const stats = await Promise.all(members.map(m => computeMemberStats(m.id)));
+  const visible = members.filter(m => !m.isShadowUser);
+  const stats = await Promise.all(visible.map(m => computeMemberStats(m.id)));
   return (stats.filter(Boolean) as MemberStats[]).sort((a,b) => b.totalPoints - a.totalPoints);
 }
 
