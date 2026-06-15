@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const members = await getAllMembers();
     const peers = members
-      .filter(m => m.isActive && m.id !== session.memberId)
+      .filter(m => m.isActive && !m.isShadowUser && m.id !== session.memberId)
       .map(m => ({ id: m.id, name: m.name, avatarInitials: m.avatarInitials }))
       .sort((a, b) => a.name.localeCompare(b.name));
     return NextResponse.json({ peers });
