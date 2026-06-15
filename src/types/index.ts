@@ -5,7 +5,8 @@ export type PointTier = 'getting_started' | 'building_momentum' | 'consistency_c
 
 export interface CountryConfig { name: string; flag: string; isActive: boolean; }
 export interface Member { id: string; name: string; email: string; country: Country; isActive: boolean; joinedAt: string; avatarInitials: string; passwordHash?: string; selfRegistered?: boolean; isAdminMember?: boolean; }
-export interface ActivityLog { id: string; memberId: string; memberName: string; activityType: ActivityType; category: ActivityCategory; date: string; notes?: string; points: number; loggedAt: string; distance?: number; duration?: number; }
+export interface TeamMember { id: string; name: string; }
+export interface ActivityLog { id: string; memberId: string; memberName: string; activityType: ActivityType; category: ActivityCategory; date: string; notes?: string; points: number; loggedAt: string; distance?: number; duration?: number; teamMembers?: TeamMember[]; teamActivityId?: string; isTeamActivity?: boolean; teamActivityOwner?: TeamMember; }
 export interface MemberStats { memberId: string; memberName: string; country: Country; totalPoints: number; tier: PointTier; runSessions: number; lunchActivities: number; raceSignups: number; racesCompleted: number; activeDays: number; lastActive?: string; isActive: boolean; }
 export interface PrizeCategory { id: string; name: string; amount: number; description: string; criteria: string; isVisible: boolean; createdAt: string; }
 export interface Winner { id: string; prizeCategoryId: string; prizeCategoryName: string; memberId: string; memberName: string; country: Country; isVisible: boolean; announcedAt: string; }
