@@ -275,11 +275,17 @@ export default function StatsPage() {
                   a.notes || null,
                 ].filter(Boolean).join(' · ');
                 return (
-                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 20px', borderBottom: '1px solid #fafafa' }}>
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 20px', borderBottom: '1px solid #fafafa' }}>
                     <span style={{ fontSize: 20, flexShrink: 0 }}>{ACTIVITY_LABELS[a.activityType]?.split(' ')[0] || '✨'}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 13, color: '#1f2937' }}>{ACTIVITY_LABELS[a.activityType]}</div>
                       <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{sub}</div>
+                      {a.teamMembers && a.teamMembers.length > 0 && (
+                        <div style={{ fontSize: 11, color: '#059669', marginTop: 3, fontWeight: 500 }}>🤝 with {a.teamMembers.map(m => m.name.split(' ')[0]).join(', ')}</div>
+                      )}
+                      {a.isTeamActivity && (
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 3, fontStyle: 'italic' }}>Team activity — logged on your behalf</div>
+                      )}
                     </div>
                     <span style={{ fontWeight: 700, color: '#1a7a4a', fontSize: 13, flexShrink: 0 }}>+{a.points}pt{a.points !== 1 ? 's' : ''}</span>
                   </div>
