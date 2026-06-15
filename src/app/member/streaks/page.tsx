@@ -1,19 +1,33 @@
 'use client';
 import { useEffect, useState } from 'react';
 
-interface StreakDay { date: string; hasActivity: boolean; isToday: boolean; }
+interface StreakDay { date: string; hasActivity: boolean; isToday: boolean; hasTeamActivity: boolean; hasSoloActivity: boolean; }
 interface Milestone { days: number; label: string; emoji: string; achieved: boolean; }
 interface StreakData {
   currentStreak: number;
   longestStreak: number;
   isActiveToday: boolean;
   totalActiveDays: number;
+  totalGroupActivities: number;
   recentDays: StreakDay[];
   milestones: Milestone[];
 }
 
 function fmtShort(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function dayColor(day: StreakDay): string {
+  if (!day.hasActivity) return '#f3f4f6';
+  if (day.hasSoloActivity && day.hasTeamActivity) return '#0d9488'; // teal — solo + group
+  if (day.hasTeamActivity) return '#7c3aed';  // purple — group only
+  return '#16a34a';                            // green — solo only
+}
+
+function dayIcon(day: StreakDay): string {
+  if (!day.hasActivity) return day.isToday ? '·' : '';
+  if (day.hasTeamActivity) return '🤝';
+  return '✓';
 }
 
 export default function StreaksPage() {
@@ -52,7 +66,7 @@ export default function StreaksPage() {
 
   if (!data) return <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Failed to load streak data.</div>;
 
-  const { currentStreak, longestStreak, isActiveToday, totalActiveDays, recentDays, milestones } = data;
+  const { currentStreak, longestStreak, isActiveToday, totalActiveDays, totalGroupActivities, recentDays, milestones } = data;
   const nextMilestone = milestones.find(m => !m.achieved);
   const daysToNext = nextMilestone ? nextMilestone.days - currentStreak : 0;
 
@@ -82,17 +96,18 @@ export default function StreaksPage() {
         </div>
 
         <div style={{ padding: 20 }}>
-          {/* Stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
+          {/* Stats — 4 cards now */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 20 }}>
             {[
               { label: 'Current Streak', value: `${currentStreak}d`, emoji: '🔥' },
               { label: 'Longest Streak', value: `${longestStreak}d`, emoji: '🏆' },
-              { label: 'Total Active Days', value: `${totalActiveDays}d`, emoji: '📅' },
+              { label: 'Active Days', value: `${totalActiveDays}d`, emoji: '📅' },
+              { label: 'Group Activities', value: String(totalGroupActivities), emoji: '🤝' },
             ].map(s => (
-              <div key={s.label} style={{ background: '#f9fafb', borderRadius: 12, padding: '12px 8px', textAlign: 'center' }}>
-                <div style={{ fontSize: 22, marginBottom: 4 }}>{s.emoji}</div>
-                <div style={{ fontSize: 20, fontWeight: 900, color: '#1f2937' }}>{s.value}</div>
-                <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2, lineHeight: 1.3 }}>{s.label}</div>
+              <div key={s.label} style={{ background: s.emoji === '🤝' ? '#f5f3ff' : '#f9fafb', borderRadius: 12, padding: '10px 6px', textAlign: 'center', border: s.emoji === '🤝' ? '1px solid #ddd6fe' : '1px solid transparent' }}>
+                <div style={{ fontSize: 20, marginBottom: 3 }}>{s.emoji}</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: s.emoji === '🤝' ? '#7c3aed' : '#1f2937' }}>{s.value}</div>
+                <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2, lineHeight: 1.3 }}>{s.label}</div>
               </div>
             ))}
           </div>
@@ -102,25 +117,51 @@ export default function StreaksPage() {
             <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Last 30 Days</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
               {recentDays.map(day => (
-                <div key={day.date} title={fmtShort(day.date)} style={{
-                  aspectRatio: '1',
-                  borderRadius: 8,
-                  background: day.hasActivity ? '#16a34a' : '#f3f4f6',
-                  border: day.isToday ? '2px solid #f26522' : '2px solid transparent',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 14,
-                }}>
-                  {day.hasActivity ? '✓' : ''}
-                  {!day.hasActivity && day.isToday ? '·' : ''}
+                <div
+                  key={day.date}
+                  title={`${fmtShort(day.date)}${day.hasTeamActivity ? ' 🤝 Group activity' : day.hasSoloActivity ? ' ✓ Solo' : ''}`}
+                  style={{
+                    aspectRatio: '1',
+                    borderRadius: 8,
+                    background: dayColor(day),
+                    border: day.isToday ? '2px solid #f26522' : '2px solid transparent',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: day.hasTeamActivity ? 11 : 13,
+                    color: day.hasActivity ? 'white' : '#d1d5db',
+                    fontWeight: 700,
+                    cursor: 'default',
+                    transition: 'transform 0.1s',
+                  }}
+                >
+                  {dayIcon(day)}
                 </div>
               ))}
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', alignItems: 'center', marginTop: 8, fontSize: 10, color: '#9ca3af' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 12, height: 12, borderRadius: 3, background: '#16a34a' }} /> Logged</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 12, height: 12, borderRadius: 3, background: '#f3f4f6', border: '1px solid #e5e7eb' }} /> No activity</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 12, height: 12, borderRadius: 3, border: '2px solid #f26522' }} /> Today</div>
+
+            {/* Legend */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', alignItems: 'center', marginTop: 10, fontSize: 10, color: '#6b7280' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: '#16a34a' }} />
+                Solo
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: '#7c3aed' }} />
+                Group only
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: '#0d9488' }} />
+                Solo + group
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: '#f3f4f6', border: '1px solid #e5e7eb' }} />
+                No activity
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, border: '2px solid #f26522' }} />
+                Today
+              </div>
             </div>
           </div>
 
@@ -134,7 +175,6 @@ export default function StreaksPage() {
                   background: m.achieved ? '#f0fdf4' : '#f9fafb',
                   border: `1px solid ${m.achieved ? '#bbf7d0' : '#f3f4f6'}`,
                   opacity: m.achieved ? 1 : 0.55,
-                  transition: 'opacity 0.2s',
                 }}>
                   <span style={{ fontSize: 24, flexShrink: 0, filter: m.achieved ? 'none' : 'grayscale(1)' }}>{m.emoji}</span>
                   <div style={{ flex: 1 }}>

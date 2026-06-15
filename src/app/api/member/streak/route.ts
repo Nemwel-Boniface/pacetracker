@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getMemberSession } from '@/lib/auth';
 import { getMemberActivities } from '@/lib/data';
 
-interface StreakDay { date: string; hasActivity: boolean; isToday: boolean; }
+interface StreakDay { date: string; hasActivity: boolean; isToday: boolean; hasTeamActivity: boolean; hasSoloActivity: boolean; }
 interface Milestone { days: number; label: string; emoji: string; achieved: boolean; }
 
 function todayStr(): string { return new Date().toISOString().slice(0, 10); }
@@ -52,13 +52,28 @@ export async function GET() {
     const dateSet = new Set<string>(activities.map(a => a.date));
     const sortedDates = [...dateSet].sort();
 
+    // Classify days
+    const soloDates = new Set<string>(activities.filter(a => !a.isTeamActivity).map(a => a.date));
+    const teamDates = new Set<string>(
+      activities.filter(a => a.isTeamActivity || (a.teamMembers && a.teamMembers.length > 0)).map(a => a.date)
+    );
+    const totalGroupActivities = activities.filter(
+      a => a.isTeamActivity || (a.teamMembers && a.teamMembers.length > 0)
+    ).length;
+
     const today = todayStr();
     const currentStreak = computeCurrentStreak(dateSet);
     const longestStreak = computeLongestStreak(sortedDates);
 
     const recentDays: StreakDay[] = Array.from({ length: 30 }, (_, i) => {
       const date = shiftDay(today, -(29 - i));
-      return { date, hasActivity: dateSet.has(date), isToday: date === today };
+      return {
+        date,
+        hasActivity: dateSet.has(date),
+        isToday: date === today,
+        hasTeamActivity: teamDates.has(date),
+        hasSoloActivity: soloDates.has(date),
+      };
     });
 
     const milestones: Milestone[] = MILESTONES.map(m => ({ ...m, achieved: longestStreak >= m.days || currentStreak >= m.days }));
@@ -69,6 +84,7 @@ export async function GET() {
       isActiveToday: dateSet.has(today),
       lastLogDate: sortedDates[sortedDates.length - 1] ?? null,
       totalActiveDays: dateSet.size,
+      totalGroupActivities,
       recentDays,
       milestones,
     });
