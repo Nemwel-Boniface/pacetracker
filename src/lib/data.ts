@@ -81,6 +81,9 @@ export async function setEmailIndex(email: string, memberId: string): Promise<vo
 }
 
 // ─── Activities ──────────────────────────────────────────────────────────────
+export async function getActivity(id: string): Promise<ActivityLog | null> {
+  return getRedis().get<ActivityLog>(KEYS.activity(id));
+}
 export async function logActivity(a: ActivityLog): Promise<void> {
   const r = getRedis();
   await r.set(KEYS.activity(a.id), a);
