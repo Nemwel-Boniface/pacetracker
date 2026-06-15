@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getMemberSession } from '@/lib/auth';
 import { getMember, getMemberActivitiesForDate, logActivity, getMemberActivities } from '@/lib/data';
-import { ActivityLog, ActivityType, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS } from '@/types';
+import { ActivityLog, ActivityType, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, TeamMember } from '@/types';
 
 const MAX_PER_DAY = 2;
 const MAX_DAYS_BACK = 2;
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     if (!member.isActive) return NextResponse.json({ error: 'Your account is inactive' }, { status: 403 });
 
-    const { activityType, notes, distance, duration, date } = await req.json();
+    const { activityType, notes, distance, duration, date, teamMemberIds } = await req.json();
     if (!activityType) return NextResponse.json({ error: 'activityType required' }, { status: 400 });
 
     const allowed = allowedDates();
@@ -49,16 +49,58 @@ export async function POST(req: NextRequest) {
     }
 
     const category = ACTIVITY_CATEGORY_MAP[activityType as ActivityType] || 'run_session';
+    const basePoints = ACTIVITY_POINTS[category];
+
+    // Resolve valid team members (active, not self)
+    const rawIds: string[] = Array.isArray(teamMemberIds) ? teamMemberIds : [];
+    const teamPeers: TeamMember[] = [];
+    for (const peerId of rawIds) {
+      if (peerId === member.id) continue;
+      const peer = await getMember(peerId);
+      if (peer?.isActive) teamPeers.push({ id: peer.id, name: peer.name });
+    }
+
+    const hasTeam = teamPeers.length > 0;
+    const points = hasTeam ? basePoints + 1 : basePoints;
+    const loggedAt = new Date().toISOString();
+    const activityId = uuidv4();
+
     const activity: ActivityLog = {
-      id: uuidv4(), memberId: member.id, memberName: member.name,
+      id: activityId, memberId: member.id, memberName: member.name,
       activityType, category, date: targetDate,
       notes: notes?.trim() || undefined,
       distance: distance != null && Number(distance) > 0 ? Math.round(Number(distance) * 10) / 10 : undefined,
       duration: duration != null && Number(duration) > 0 ? Math.round(Number(duration)) : undefined,
-      points: ACTIVITY_POINTS[category],
-      loggedAt: new Date().toISOString(),
+      points,
+      loggedAt,
+      ...(hasTeam && { teamMembers: teamPeers }),
     };
     await logActivity(activity);
+
+    // Auto-log for each teammate (bypasses their daily cap — team activities are bonus)
+    if (hasTeam) {
+      const teamActivity = {
+        activityType, category, date: targetDate,
+        notes: notes?.trim() || undefined,
+        distance: activity.distance,
+        duration: activity.duration,
+        points,
+        loggedAt,
+      };
+      const owner: TeamMember = { id: member.id, name: member.name };
+      await Promise.all(teamPeers.map(peer =>
+        logActivity({
+          ...teamActivity,
+          id: uuidv4(),
+          memberId: peer.id,
+          memberName: peer.name,
+          isTeamActivity: true,
+          teamActivityId: activityId,
+          teamActivityOwner: owner,
+        } as ActivityLog)
+      ));
+    }
+
     return NextResponse.json({ activity, remaining: MAX_PER_DAY - dateActivities.length - 1, date: targetDate }, { status: 201 });
   } catch { return NextResponse.json({ error: 'Failed to log activity' }, { status: 500 }); }
 }
