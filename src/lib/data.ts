@@ -62,6 +62,9 @@ export async function logActivity(a: ActivityLog): Promise<void> {
   await r.sadd(KEYS.memberActivities(a.memberId), a.id);
   await r.sadd(KEYS.dailyActivities(a.date), a.id);
 }
+export async function updateActivity(a: ActivityLog): Promise<void> {
+  await getRedis().set(KEYS.activity(a.id), a);
+}
 export async function deleteActivity(id: string): Promise<void> {
   const r = getRedis(); const a = await r.get<ActivityLog>(KEYS.activity(id)); if (!a) return;
   await r.del(KEYS.activity(id)); await r.srem(KEYS.activities, id);
