@@ -18,9 +18,10 @@ export async function POST(req: NextRequest) {
     const valid = await bcrypt.compare(password, member.passwordHash);
     if (!valid) return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
 
-    const token = await createMemberToken(member.id, member.email);
+    const requiresPasswordChange = member.isInvited === true && member.inviteAccepted !== true;
+    const token = await createMemberToken(member.id, member.email, requiresPasswordChange);
     const opts = getMemberCookieOptions();
-    const res = NextResponse.json({ success: true });
+    const res = NextResponse.json({ success: true, requiresPasswordChange });
     res.cookies.set({ name: opts.name, value: token, httpOnly: opts.httpOnly, secure: opts.secure, sameSite: opts.sameSite, maxAge: opts.maxAge, path: opts.path });
     return res;
   } catch (e) { console.error(e); return NextResponse.json({ error: 'Server error' }, { status: 500 }); }
