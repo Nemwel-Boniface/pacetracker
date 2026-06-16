@@ -21,7 +21,7 @@ function buildLeadersMessage(active: MemberStats[], date: string, prizes: PrizeC
   const top = active.slice(0, 5);
   const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
   const topLines = top.length > 0
-    ? top.map((m, i) => `${medals[i]} *${m.memberName}* — ${m.totalPoints} pts | ${m.activeDays} active day${m.activeDays !== 1 ? 's' : ''} | ${m.runSessions} session${m.runSessions !== 1 ? 's' : ''}`).join('\n')
+    ? top.map((m, i) => `${medals[i]} *${m.memberName}* — ${m.totalPoints} pts | ${m.activeDays} active day${m.activeDays !== 1 ? 's' : ''} | ${m.runSessions + m.lunchActivities + m.raceSignups + m.racesCompleted} activit${m.runSessions + m.lunchActivities + m.raceSignups + m.racesCompleted !== 1 ? 'ies' : 'y'}`).join('\n')
     : '_No activity logged yet — be the first!_';
   const totalPoints = active.reduce((s, m) => s + m.totalPoints, 0);
   const totalDays = active.reduce((s, m) => s + m.activeDays, 0);
@@ -308,7 +308,7 @@ export default function AdminLeaderboardPage() {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 13, color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.memberName} <span>{getCountryFlag(m.country, countries)}</span></div>
-                        <div style={{ fontSize: 10, color: '#9ca3af' }}>{m.activeDays} days active · {m.runSessions} sessions</div>
+                        <div style={{ fontSize: 10, color: '#9ca3af' }}>{m.activeDays} days active · {m.runSessions + m.lunchActivities + m.raceSignups + m.racesCompleted} activities</div>
                       </div>
                       <div style={{ fontWeight: 900, fontSize: 16, color: '#1a7a4a', flexShrink: 0 }}>{m.totalPoints}</div>
                     </div>
