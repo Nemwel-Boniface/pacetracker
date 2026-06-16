@@ -131,7 +131,7 @@ export default function LeaderboardPage() {
                       ); })()}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.memberName} <span style={{ fontSize: 14 }}>{getCountryFlag(m.country, countries)}</span></div>
-                        <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>🏃 {m.runSessions} sessions · 📅 {m.activeDays} days{m.racesCompleted > 0 ? ` · 🏅 ${m.racesCompleted} race${m.racesCompleted !== 1 ? 's' : ''}` : ''}</div>
+                        <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>🎯 {m.runSessions + m.lunchActivities + m.raceSignups + m.racesCompleted} activities · 📅 {m.activeDays} days{m.racesCompleted > 0 ? ` · 🏅 ${m.racesCompleted} race${m.racesCompleted !== 1 ? 's' : ''}` : ''}</div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontSize: 26, fontWeight: 900, color: '#1a7a4a' }}>{m.totalPoints}</div>

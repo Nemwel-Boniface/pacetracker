@@ -90,7 +90,7 @@ export default function MemberLeaderboardPage() {
                       <div title={`${m.memberName} · ${STICKER_LABELS[sticker] ?? sticker}`} style={{ width: 40, height: 40, borderRadius: '50%', background: bg, border: `2px solid ${border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{sticker}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, color: '#111827', fontSize: 14 }}>{m.memberName} {getCountryFlag(m.country, countries)} {isMe && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>(You)</span>}</div>
-                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>🏃 {m.runSessions} sessions · 📅 {m.activeDays} days</div>
+                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>🎯 {m.runSessions + m.lunchActivities + m.raceSignups + m.racesCompleted} activities · 📅 {m.activeDays} days</div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontSize: 22, fontWeight: 900, color: '#1a7a4a' }}>{m.totalPoints}</div>
