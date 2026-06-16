@@ -27,23 +27,25 @@ export function getSessionCookieOptions() {
 }
 
 // ─── Member auth ─────────────────────────────────────────────────────────────
-export async function createMemberToken(memberId: string, email: string): Promise<string> {
-  return await new SignJWT({ sub: memberId, email, role: 'member' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('24h').sign(SECRET);
+export async function createMemberToken(memberId: string, email: string, requiresPasswordChange = false): Promise<string> {
+  const claims: Record<string, unknown> = { sub: memberId, email, role: 'member' };
+  if (requiresPasswordChange) claims.pch = true;
+  return await new SignJWT(claims).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('24h').sign(SECRET);
 }
-export async function verifyMemberToken(token: string): Promise<{ sub: string; email: string; role: string } | null> {
+export async function verifyMemberToken(token: string): Promise<{ sub: string; email: string; role: string; pch?: boolean } | null> {
   try {
     const { payload } = await jwtVerify(token, SECRET);
     if (payload.role !== 'member') return null;
-    return payload as { sub: string; email: string; role: string };
+    return payload as { sub: string; email: string; role: string; pch?: boolean };
   } catch { return null; }
 }
-export async function getMemberSession(): Promise<{ memberId: string; email: string } | null> {
+export async function getMemberSession(): Promise<{ memberId: string; email: string; requiresPasswordChange?: boolean } | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(MEMBER_COOKIE)?.value;
   if (!token) return null;
   const payload = await verifyMemberToken(token);
   if (!payload) return null;
-  return { memberId: payload.sub, email: payload.email };
+  return { memberId: payload.sub, email: payload.email, requiresPasswordChange: payload.pch };
 }
 export function getMemberCookieOptions() {
   return { name: MEMBER_COOKIE, httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, maxAge: 86400, path: '/' };

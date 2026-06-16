@@ -90,14 +90,40 @@ export async function logActivity(a: ActivityLog): Promise<void> {
   await r.sadd(KEYS.activities, a.id);
   await r.sadd(KEYS.memberActivities(a.memberId), a.id);
   await r.sadd(KEYS.dailyActivities(a.date), a.id);
+  if (a.isTeamActivity && a.teamActivityId) {
+    await r.sadd(KEYS.groupActivityLogs(a.teamActivityId), a.id);
+  }
 }
 export async function updateActivity(a: ActivityLog): Promise<void> {
   await getRedis().set(KEYS.activity(a.id), a);
 }
 export async function deleteActivity(id: string): Promise<void> {
-  const r = getRedis(); const a = await r.get<ActivityLog>(KEYS.activity(id)); if (!a) return;
-  await r.del(KEYS.activity(id)); await r.srem(KEYS.activities, id);
-  await r.srem(KEYS.memberActivities(a.memberId), id); await r.srem(KEYS.dailyActivities(a.date), id);
+  const r = getRedis();
+  const a = await r.get<ActivityLog>(KEYS.activity(id));
+  if (!a) return;
+  await r.del(KEYS.activity(id));
+  await r.srem(KEYS.activities, id);
+  await r.srem(KEYS.memberActivities(a.memberId), id);
+  await r.srem(KEYS.dailyActivities(a.date), id);
+  // Cascade: delete all team auto-logs when a group activity (owner) is deleted
+  if (a.teamMembers && a.teamMembers.length > 0) {
+    const autoLogIds = await r.smembers(KEYS.groupActivityLogs(id));
+    if (autoLogIds?.length) {
+      await Promise.all(autoLogIds.map(async (autoId) => {
+        const autoLog = await r.get<ActivityLog>(KEYS.activity(autoId));
+        if (!autoLog) return;
+        await r.del(KEYS.activity(autoId));
+        await r.srem(KEYS.activities, autoId);
+        await r.srem(KEYS.memberActivities(autoLog.memberId), autoId);
+        await r.srem(KEYS.dailyActivities(autoLog.date), autoId);
+      }));
+    }
+    await r.del(KEYS.groupActivityLogs(id));
+  }
+  // If this IS a team auto-log, remove it from the parent index
+  if (a.isTeamActivity && a.teamActivityId) {
+    await r.srem(KEYS.groupActivityLogs(a.teamActivityId), id);
+  }
 }
 export async function getActivitiesForDate(date: string): Promise<ActivityLog[]> {
   const r = getRedis(); const ids = await r.smembers(KEYS.dailyActivities(date));
@@ -140,7 +166,7 @@ export async function computeMemberStats(memberId: string): Promise<MemberStats 
 }
 export async function getAllMemberStats(): Promise<MemberStats[]> {
   const members = await getAllMembers(); if (!members.length) return [];
-  const visible = members.filter(m => !m.isShadowUser);
+  const visible = members.filter(m => !m.isShadowUser && !(m.isInvited && !m.inviteAccepted));
   const stats = await Promise.all(visible.map(m => computeMemberStats(m.id)));
   return (stats.filter(Boolean) as MemberStats[]).sort((a,b) => b.totalPoints - a.totalPoints);
 }
