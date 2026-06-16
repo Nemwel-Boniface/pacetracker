@@ -18,6 +18,9 @@ export async function middleware(request: NextRequest) {
     try {
       const { payload } = await jwtVerify(token, SECRET);
       if (payload.role !== 'member') throw new Error('not a member token');
+      if (payload.pch && pathname !== '/member/change-password') {
+        return NextResponse.redirect(new URL('/member/change-password', request.url));
+      }
       return NextResponse.next();
     } catch { const r = NextResponse.redirect(new URL('/authenticate', request.url)); r.cookies.delete('pt_member_session'); return r; }
   }

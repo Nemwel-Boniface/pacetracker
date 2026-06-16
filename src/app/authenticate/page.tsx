@@ -43,8 +43,10 @@ export default function AuthenticatePage() {
       const res = await fetch('/api/auth/member/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(login) });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Login failed'); return; }
-      try { localStorage.setItem('pt_member_creds', JSON.stringify(login)); } catch { /* ignore */ }
-      router.push('/member');
+      if (!data.requiresPasswordChange) {
+        try { localStorage.setItem('pt_member_creds', JSON.stringify(login)); } catch { /* ignore */ }
+      }
+      router.push(data.requiresPasswordChange ? '/member/change-password' : '/member');
     } catch { setError('Connection error'); } finally { setLoading(false); }
   }
 
