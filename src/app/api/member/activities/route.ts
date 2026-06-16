@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getMemberSession } from '@/lib/auth';
-import { getMember, getMemberActivitiesForDate, logActivity, getMemberActivities } from '@/lib/data';
+import { getMember, getMemberActivitiesForDate, logActivity, getMemberActivities, getActivitiesForDate } from '@/lib/data';
 import { ActivityLog, ActivityType, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, TeamMember } from '@/types';
 
 const MAX_PER_DAY = 2;
@@ -61,6 +61,29 @@ export async function POST(req: NextRequest) {
     }
 
     const hasTeam = teamPeers.length > 0;
+
+    // Duplicate group activity guard
+    if (hasTeam) {
+      const dayActivities = await getActivitiesForDate(targetDate);
+      const existingGroupActivities = dayActivities.filter(a =>
+        !a.isTeamActivity && a.teamMembers && a.teamMembers.length > 0
+      );
+      const newSet = new Set([member.id, ...teamPeers.map(p => p.id)]);
+      for (const existing of existingGroupActivities) {
+        const existingSet = new Set([existing.memberId, ...(existing.teamMembers || []).map(m => m.id)]);
+        let overlap = 0;
+        for (const pid of newSet) { if (existingSet.has(pid)) overlap++; }
+        const smallerSize = Math.min(newSet.size, existingSet.size);
+        if (overlap >= 2 && overlap >= smallerSize * 0.5) {
+          return NextResponse.json({
+            error: `Duplicate group activity — ${existing.memberName} already logged a similar activity with the same participants on this date.`,
+            duplicate: true,
+            existingOwner: existing.memberName,
+          }, { status: 409 });
+        }
+      }
+    }
+
     const points = hasTeam ? basePoints + 1 : basePoints;
     const loggedAt = new Date().toISOString();
     const activityId = uuidv4();
