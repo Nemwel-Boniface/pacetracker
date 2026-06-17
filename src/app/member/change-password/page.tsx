@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 const inp = { width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' };
 const btn = (bg: string, disabled = false) => ({ width: '100%', padding: '12px', borderRadius: 10, background: disabled ? '#9ca3af' : bg, color: 'white', fontWeight: 700, fontSize: 14, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer' });
@@ -27,7 +28,8 @@ export default function ChangePasswordPage() {
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to update password'); return; }
       try { localStorage.removeItem('pt_member_creds'); } catch { /* ignore */ }
-      router.push('/member');
+      toast.success('Password set! Welcome to PaceTracker 🎉');
+      setTimeout(() => { window.location.href = '/member'; }, 800);
     } catch { setError('Connection error'); } finally { setLoading(false); }
   }
 

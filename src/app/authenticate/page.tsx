@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { CountryConfig } from '@/types';
+import { toast } from 'sonner';
 
 const inp = { width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' };
 const btn = (bg: string, disabled = false) => ({ width: '100%', padding: '12px', borderRadius: 10, background: disabled ? '#9ca3af' : bg, color: 'white', fontWeight: 700, fontSize: 14, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer' });
@@ -45,6 +46,7 @@ export default function AuthenticatePage() {
       if (!res.ok) { setError(data.error || 'Login failed'); return; }
       if (!data.requiresPasswordChange) {
         try { localStorage.setItem('pt_member_creds', JSON.stringify(login)); } catch { /* ignore */ }
+        toast.success('Welcome back! 👋');
       }
       router.push(data.requiresPasswordChange ? '/member/change-password' : '/member');
     } catch { setError('Connection error'); } finally { setLoading(false); }
@@ -60,6 +62,7 @@ export default function AuthenticatePage() {
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Registration failed'); return; }
       try { localStorage.setItem('pt_member_creds', JSON.stringify({ email: signup.email, password: signup.password })); } catch { /* ignore */ }
+      toast.success('Account created! Welcome to PaceTracker 🏃');
       router.push('/member');
     } catch { setError('Connection error'); } finally { setLoading(false); }
   }
@@ -178,9 +181,12 @@ export default function AuthenticatePage() {
           )}
         </div>
 
-        <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 16 }}>
-          Consistency over intensity · #Move2026
-        </p>
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <a href="/" style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 500 }}>
+            ← View leaderboard
+          </a>
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, margin: '8px 0 0' }}>Consistency over intensity · #Move2026</p>
+        </div>
       </div>
     </div>
   );
