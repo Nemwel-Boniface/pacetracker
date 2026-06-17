@@ -12,7 +12,7 @@ function WelcomeMessage({ member, tempPassword, onDismiss }: { member: Member; t
   const [copied, setCopied] = useState(false);
   const [copiedPwd, setCopiedPwd] = useState(false);
   const platformUrl = typeof window !== 'undefined' ? window.location.origin : 'https://pacetracker.app';
-  const message = `Hi ${member.name},
+  const message = `Hello ${member.name},
 
 You've been invited to PaceTracker – Eden Care's #Move2026 fitness challenge! 🏃‍♂️
 
@@ -21,6 +21,8 @@ Email: ${member.email}
 Temporary password: ${tempPassword}
 
 When you first log in, you'll be asked to create your own password.
+
+Once you're in, feel free to play around with the 🦏 chatbot — it can answer questions and even log activities for you!
 
 Let's move together! 💪`;
 

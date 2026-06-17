@@ -13,6 +13,7 @@ interface LogDraft {
   dateLabel?: string;
   distance?: string;
   duration?: string;
+  steps?: string;
   notes?: string;
 }
 type InputMode =
@@ -84,7 +85,7 @@ export default function ChatBot() {
   const [prizes, setPrizes]         = useState<PrizeCategory[]>([]);
   const [winners, setWinners]       = useState<Winner[]>([]);
   const [logDraft, setLogDraft]     = useState<LogDraft>({});
-  const [optionals, setOptionals]   = useState({ distance: '', duration: '', notes: '' });
+  const [optionals, setOptionals]   = useState({ distance: '', duration: '', steps: '', notes: '' });
   const bottomRef                   = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -185,7 +186,7 @@ export default function ChatBot() {
 
     const firstName = data.member.name.split(' ')[0];
     setLogDraft({});
-    setOptionals({ distance: '', duration: '', notes: '' });
+    setOptionals({ distance: '', duration: '', steps: '', notes: '' });
 
     setMessages(prev => [...prev, {
       id: `b-${Date.now()}`, role: 'bot',
@@ -230,19 +231,21 @@ export default function ChatBot() {
   function handleOptionalDetails() {
     const dist  = optionals.distance.trim();
     const dur   = optionals.duration.trim();
+    const stps  = optionals.steps.trim();
     const notes = optionals.notes.trim();
 
-    // Stage these in draft for the confirm step
     setLogDraft(d => ({
       ...d,
       distance: dist  || undefined,
       duration: dur   || undefined,
+      steps:    stps  || undefined,
       notes:    notes || undefined,
     }));
 
     const parts: string[] = [];
     if (dist)  parts.push(`${dist} km`);
     if (dur)   parts.push(`${dur} min`);
+    if (stps)  parts.push(`${parseInt(stps).toLocaleString()} steps`);
     if (notes) parts.push(notes);
     setMessages(prev => [...prev, {
       id: `u-${Date.now()}`, role: 'user',
@@ -251,7 +254,6 @@ export default function ChatBot() {
     setInputMode('none');
     setThinking(true);
 
-    // Capture current draft values (activityType + date were set in earlier steps)
     const { activityType, dateLabel } = logDraft;
     setTimeout(() => {
       setThinking(false);
@@ -261,6 +263,7 @@ export default function ChatBot() {
       const details: string[] = [];
       if (dist)  details.push(`📏 **${dist} km**`);
       if (dur)   details.push(`⏱️ **${dur} min**`);
+      if (stps)  details.push(`👣 **${parseInt(stps).toLocaleString()} steps**`);
       if (notes) details.push(`📝 "${notes}"`);
 
       const preview = [
@@ -291,6 +294,7 @@ export default function ChatBot() {
           date:         logDraft.date,
           ...(logDraft.distance && { distance: parseFloat(logDraft.distance) }),
           ...(logDraft.duration && { duration: parseInt(logDraft.duration) }),
+          ...(logDraft.steps    && { steps: parseInt(logDraft.steps) }),
           ...(logDraft.notes    && { notes: logDraft.notes }),
         }),
       });
@@ -312,7 +316,7 @@ export default function ChatBot() {
         text: `Done! 🎉 **+${pts} point${pts !== 1 ? 's' : ''}** added to your total!\n\n${ACTIVITY_LABELS[logDraft.activityType!]} logged for ${logDraft.dateLabel}. It's showing up in your activity log right now! 🦏\n\nAnything else I can help with?`,
       }]);
       setLogDraft({});
-      setOptionals({ distance: '', duration: '', notes: '' });
+      setOptionals({ distance: '', duration: '', steps: '', notes: '' });
       setInputMode('faqs');
     } catch {
       setThinking(false);
@@ -326,7 +330,7 @@ export default function ChatBot() {
 
   function restartLogFlow() {
     setLogDraft({});
-    setOptionals({ distance: '', duration: '', notes: '' });
+    setOptionals({ distance: '', duration: '', steps: '', notes: '' });
     setMessages(prev => [...prev, {
       id: `b-${Date.now()}`, role: 'bot',
       text: "No worries — let's start fresh! What type of activity did you do?",
@@ -568,6 +572,15 @@ export default function ChatBot() {
                         style={inp}
                       />
                     </div>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 4 }}>Steps 👣</label>
+                    <input
+                      type="number" min="0" step="1" placeholder="e.g. 8000"
+                      value={optionals.steps}
+                      onChange={e => setOptionals(o => ({ ...o, steps: e.target.value }))}
+                      style={inp}
+                    />
                   </div>
                   <div style={{ marginBottom: 10 }}>
                     <label style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 4 }}>Notes</label>
