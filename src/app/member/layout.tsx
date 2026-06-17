@@ -53,7 +53,7 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
       <main style={{ maxWidth: 768, margin: '0 auto', padding: '20px 16px' }}>
         {children}
       </main>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+<style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
