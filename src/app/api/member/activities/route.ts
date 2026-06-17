@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     if (!member.isActive) return NextResponse.json({ error: 'Your account is inactive' }, { status: 403 });
 
-    const { activityType, notes, distance, duration, date, teamMemberIds } = await req.json();
+    const { activityType, notes, distance, duration, steps, date, teamMemberIds } = await req.json();
     if (!activityType) return NextResponse.json({ error: 'activityType required' }, { status: 400 });
 
     const allowed = allowedDates();
@@ -94,6 +94,7 @@ export async function POST(req: NextRequest) {
       notes: notes?.trim() || undefined,
       distance: distance != null && Number(distance) > 0 ? Math.round(Number(distance) * 10) / 10 : undefined,
       duration: duration != null && Number(duration) > 0 ? Math.round(Number(duration)) : undefined,
+      steps: steps != null && Number(steps) > 0 ? Math.round(Number(steps)) : undefined,
       points,
       loggedAt,
       ...(hasTeam && { teamMembers: teamPeers }),
@@ -107,6 +108,7 @@ export async function POST(req: NextRequest) {
         notes: notes?.trim() || undefined,
         distance: activity.distance,
         duration: activity.duration,
+        steps: activity.steps,
         points,
         loggedAt,
       };
