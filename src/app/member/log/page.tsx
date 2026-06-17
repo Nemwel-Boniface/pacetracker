@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { toast } from 'sonner';
 import { ActivityLog, ActivityType, ACTIVITY_LABELS, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS } from '@/types';
 
 const MAX_PER_DAY = 2;
@@ -15,7 +16,7 @@ function fmtDateLabel(date: string): string {
   return new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 function activityMeta(a: ActivityLog): string {
-  return [a.distance != null ? `${a.distance}km` : null, a.duration != null ? `${a.duration}min` : null, a.notes || null].filter(Boolean).join(' · ');
+  return [a.distance != null ? `${a.distance}km` : null, a.duration != null ? `${a.duration}min` : null, a.steps != null ? `${a.steps.toLocaleString()} steps` : null, a.notes || null].filter(Boolean).join(' · ');
 }
 function initials(name: string): string {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -268,7 +269,7 @@ export default function MemberLogPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [form, setForm] = useState({ activityType: 'run' as ActivityType, notes: '', distance: '', duration: '' });
+  const [form, setForm] = useState({ activityType: 'run' as ActivityType, notes: '', distance: '', duration: '', steps: '' });
   const [teamMemberIds, setTeamMemberIds] = useState<string[]>([]);
   const [expandedEditId, setExpandedEditId] = useState<string | null>(null);
 
@@ -304,11 +305,12 @@ export default function MemberLogPage() {
         activityType: form.activityType, notes: form.notes, date: selectedDate,
         ...(form.distance ? { distance: parseFloat(form.distance) } : {}),
         ...(form.duration ? { duration: parseInt(form.duration) } : {}),
+        ...(form.steps ? { steps: parseInt(form.steps) } : {}),
         ...(teamMemberIds.length > 0 ? { teamMemberIds } : {}),
       };
       const res = await fetch('/api/member/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Failed to log activity'); return; }
+      if (!res.ok) { setError(data.error || 'Failed to log activity'); toast.error(data.error || 'Failed to log activity'); return; }
       const { activity } = data;
       const teamCount = activity.teamMembers?.length ?? 0;
       let msg = `Logged! +${activity.points} point${activity.points !== 1 ? 's' : ''} 🎉`;
@@ -316,8 +318,9 @@ export default function MemberLogPage() {
         const names = activity.teamMembers!.map((m: { name: string }) => m.name.split(' ')[0]).join(', ');
         msg += ` ${names} also got their points! 🤝`;
       }
+      toast.success(msg);
       setSuccess(msg);
-      setForm({ activityType: 'run', notes: '', distance: '', duration: '' });
+      setForm({ activityType: 'run', notes: '', distance: '', duration: '', steps: '' });
       setTeamMemberIds([]);
       setAllActivities(prev => [activity, ...prev]);
     } catch { setError('Connection error'); } finally { setSaving(false); }
@@ -398,6 +401,10 @@ export default function MemberLogPage() {
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Duration — min <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
                 <input type="number" min="1" step="1" value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} placeholder="e.g. 32" style={inp} />
               </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Steps <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional — use if your app counts steps)</span></label>
+              <input type="number" min="0" step="1" value={form.steps} onChange={e => setForm({ ...form, steps: e.target.value })} placeholder="e.g. 8000" style={inp} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Notes <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
