@@ -60,10 +60,13 @@ Let's move together! 💪`;
 }
 
 export default function MembersPage() {
+  type FilterType = 'all' | 'active' | 'inactive' | 'pending' | 'self_reg';
+
   const [members, setMembers] = useState<Member[]>([]);
   const [countries, setCountries] = useState<CountryConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<FilterType>('active');
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name:'', email:'', country:'' });
@@ -98,25 +101,71 @@ export default function MembersPage() {
   }
   async function handleToggle(id:string){ const res=await fetch('/api/members',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,action:'toggle'})}); const d=await res.json(); if(res.ok)setMembers(p=>p.map(m=>m.id===id?d.member:m)); }
   async function handleDelete(id:string,name:string){ if(!confirm(`Remove ${name}?`))return; await fetch(`/api/members?id=${id}`,{method:'DELETE'}); setMembers(p=>p.filter(m=>m.id!==id)); }
-  const filtered = members.filter(m=>m.name.toLowerCase().includes(search.toLowerCase())||m.email.toLowerCase().includes(search.toLowerCase()));
 
-  const pendingCount = members.filter(m => m.isInvited && !m.inviteAccepted).length;
-  const selfRegCount = members.filter(m => m.selfRegistered).length;
-  const acceptedCount = members.filter(m => m.isInvited && m.inviteAccepted).length;
+  const counts = {
+    all:      members.length,
+    active:   members.filter(m => m.isActive).length,
+    inactive: members.filter(m => !m.isActive).length,
+    pending:  members.filter(m => m.isInvited && !m.inviteAccepted).length,
+    self_reg: members.filter(m => !!m.selfRegistered && !m.isAdminMember).length,
+  };
+
+  const filtered = members
+    .filter(m => {
+      const q = search.toLowerCase();
+      return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+    })
+    .filter(m => {
+      switch (filter) {
+        case 'active':   return m.isActive;
+        case 'inactive': return !m.isActive;
+        case 'pending':  return m.isInvited && !m.inviteAccepted;
+        case 'self_reg': return !!m.selfRegistered && !m.isAdminMember;
+        default:         return true;
+      }
+    });
 
   return (
     <div style={{padding:24,maxWidth:800,margin:'0 auto'}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-        <div><h1 style={{fontSize:26,fontWeight:900,color:'#1f2937',margin:0}}>Members</h1><p style={{color:'#6b7280',fontSize:13,margin:'4px 0 0'}}>{members.length} registered participants</p></div>
+        <div>
+          <h1 style={{fontSize:26,fontWeight:900,color:'#1f2937',margin:0}}>Members</h1>
+          <p style={{color:'#6b7280',fontSize:13,margin:'4px 0 0'}}>
+            {filtered.length !== members.length ? `${filtered.length} of ${members.length}` : members.length} registered participants
+          </p>
+        </div>
         <button onClick={()=>{setShowForm(!showForm);setError('');}} style={btn('#1a7a4a')}>+ Invite Member</button>
       </div>
 
-      {/* Stats row */}
-      {(selfRegCount > 0 || pendingCount > 0 || acceptedCount > 0) && (
-        <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
-          {selfRegCount > 0 && <span style={{fontSize:12,background:'#eff6ff',color:'#1d4ed8',padding:'4px 10px',borderRadius:999,fontWeight:600}}>{selfRegCount} self-registered</span>}
-          {pendingCount > 0 && <span style={{fontSize:12,background:'#fef3c7',color:'#92400e',padding:'4px 10px',borderRadius:999,fontWeight:600}}>{pendingCount} invite pending</span>}
-          {acceptedCount > 0 && <span style={{fontSize:12,background:'#f0fdf4',color:'#166534',padding:'4px 10px',borderRadius:999,fontWeight:600}}>{acceptedCount} invite accepted</span>}
+      {/* Filter chips */}
+      {!loading && (
+        <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
+          {([
+            { key: 'active',   label: 'Active',          bg: '#f0fdf4', activeBg: '#1a7a4a', color: '#166534',  activeColor: 'white', border: '#86efac' },
+            { key: 'all',      label: 'All',             bg: '#f9fafb', activeBg: '#1f2937', color: '#374151',  activeColor: 'white', border: '#e5e7eb' },
+            { key: 'inactive', label: 'Inactive',        bg: '#f9fafb', activeBg: '#6b7280', color: '#6b7280',  activeColor: 'white', border: '#e5e7eb' },
+            { key: 'pending',  label: 'Invite Pending',  bg: '#fffbeb', activeBg: '#d97706', color: '#92400e',  activeColor: 'white', border: '#fde68a' },
+            { key: 'self_reg', label: 'Self-Registered', bg: '#eff6ff', activeBg: '#1d4ed8', color: '#1d4ed8',  activeColor: 'white', border: '#bfdbfe' },
+          ] as const).map(chip => {
+            const active = filter === chip.key;
+            const count = counts[chip.key];
+            if (count === 0 && chip.key !== 'active' && chip.key !== 'all') return null;
+            return (
+              <button
+                key={chip.key}
+                onClick={() => setFilter(chip.key)}
+                style={{
+                  padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  border: `1.5px solid ${active ? 'transparent' : chip.border}`,
+                  background: active ? chip.activeBg : chip.bg,
+                  color: active ? chip.activeColor : chip.color,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {chip.label} <span style={{opacity: 0.75}}>({count})</span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -157,7 +206,7 @@ export default function MembersPage() {
       </div>
 
       {loading ? <div style={{textAlign:'center',padding:'4rem 0'}}><div style={{width:32,height:32,border:'4px solid #1a7a4a',borderTopColor:'transparent',borderRadius:'50%',animation:'spin 1s linear infinite',margin:'0 auto'}}/><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>
-      : filtered.length===0 ? <div style={{textAlign:'center',padding:'4rem',background:'white',borderRadius:16,border:'1px solid #f3f4f6'}}><div style={{fontSize:48,marginBottom:12}}>👥</div><h3 style={{fontWeight:700,color:'#374151',marginBottom:4}}>{search?'No members found':'No members yet'}</h3><p style={{color:'#9ca3af',fontSize:13}}>{search?'Try a different search':'Click "Invite Member" to add the first participant'}</p></div>
+      : filtered.length===0 ? <div style={{textAlign:'center',padding:'4rem',background:'white',borderRadius:16,border:'1px solid #f3f4f6'}}><div style={{fontSize:48,marginBottom:12}}>👥</div><h3 style={{fontWeight:700,color:'#374151',marginBottom:4}}>{search?'No members found':'No members in this filter'}</h3><p style={{color:'#9ca3af',fontSize:13}}>{search?'Try a different search':'Try switching to a different filter above'}</p></div>
       : (<div style={{display:'flex',flexDirection:'column',gap:8}}>
         {filtered.map(m=>{
           const isInvitePending = m.isInvited && !m.inviteAccepted;
