@@ -4,6 +4,16 @@ import { MemberStats, Winner, PrizeCategory, CountryConfig, TIER_CONFIG, PointTi
 import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
 import Link from 'next/link';
 
+const PAGE_SIZE = 10;
+const MARATHON_DATE = new Date('2026-07-26T07:00:00+03:00');
+const MARATHON_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSfSWEla_XCfgDYQNdxP3gHJb-loUzQvFaHIQ-K_Kyjv_CGzpw/viewform?usp=header';
+
+function daysUntilMarathon(): number {
+  const now = new Date();
+  const diff = MARATHON_DATE.getTime() - now.getTime();
+  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+}
+
 export default function LeaderboardPage() {
   const [stats, setStats] = useState<MemberStats[]>([]);
   const [winners, setWinners] = useState<Winner[]>([]);
@@ -12,24 +22,46 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('All');
   const [lastUpdated, setLastUpdated] = useState('');
+  const [page, setPage] = useState(0);
+  const [marathonBannerEnabled, setMarathonBannerEnabled] = useState(false);
+  const [marathonCountries, setMarathonCountries] = useState<string[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
-      const [lbRes, ctRes] = await Promise.all([fetch('/api/leaderboard'), fetch('/api/countries')]);
-      const [lbData, ctData] = await Promise.all([lbRes.json(), ctRes.json()]);
+      const [lbRes, ctRes, stRes] = await Promise.all([
+        fetch('/api/leaderboard'),
+        fetch('/api/countries'),
+        fetch('/api/admin/settings'),
+      ]);
+      const [lbData, ctData, stData] = await Promise.all([lbRes.json(), ctRes.json(), stRes.json()]);
       setStats(lbData.stats || []); setWinners(lbData.winners || []); setPrizes(lbData.prizes || []);
       setCountries((ctData.countries || []).filter((c: CountryConfig) => c.isActive));
+      setMarathonBannerEnabled(stData.settings?.marathonBannerEnabled ?? true);
+      setMarathonCountries(stData.settings?.marathonCountries ?? []);
       setLastUpdated(new Date().toLocaleTimeString());
     } catch { setStats([]); } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 60000); return () => clearInterval(t); }, [fetchData]);
 
+  // Reset page when filter changes
+  useEffect(() => { setPage(0); }, [filter]);
+
   const allActive = stats.filter(s => s.isActive);
   const rankMap = new Map(allActive.map((m, i) => [m.memberId, i + 1]));
   const active = (filter === 'All' ? stats : stats.filter(s => s.country === filter)).filter(s => s.isActive);
-  const tierGroups = (Object.entries(TIER_CONFIG) as [PointTier, typeof TIER_CONFIG[PointTier]][]).reverse()
-    .map(([key, cfg]) => ({ tier: key, cfg, members: active.filter(s => s.tier === key) }));
+
+  // Build flat ordered list preserving tier ordering (champions first)
+  const tierOrder: PointTier[] = ['move_together_champions', 'consistency_crew', 'building_momentum', 'getting_started'];
+  type FlatMember = MemberStats & { tier: PointTier; tierIndex: number };
+  const flatMembers: FlatMember[] = tierOrder.flatMap(tier =>
+    active.filter(m => m.tier === tier).map((m, i) => ({ ...m, tier, tierIndex: i }))
+  );
+
+  const totalPages = Math.ceil(flatMembers.length / PAGE_SIZE);
+  const pageMembers = flatMembers.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const daysLeft = daysUntilMarathon();
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8' }}>
@@ -61,6 +93,49 @@ export default function LeaderboardPage() {
       </header>
 
       <main style={{ maxWidth: 768, margin: '0 auto', padding: '24px 16px' }}>
+
+        {/* Marathon registration CTA banner */}
+        {marathonBannerEnabled && (
+          <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#1a4a8a)', borderRadius: 16, padding: '18px 20px', marginBottom: 20, border: '1px solid #3b5999', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: -20, right: -20, fontSize: 80, opacity: 0.08 }}>🏅</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{ fontSize: 36, flexShrink: 0 }}>🏃‍♂️</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                  <span style={{ fontWeight: 900, fontSize: 15, color: 'white' }}>USIU Marathon — 26 July 2026</span>
+                  {marathonCountries.length > 0 && (
+                    <span style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20 }}>
+                      {marathonCountries.map(c => {
+                        const flag = countries.find(ct => ct.name === c)?.flag ?? '';
+                        return `${flag} Team ${c}`;
+                      }).join(' · ')}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginBottom: 10, lineHeight: 1.5 }}>
+                  Sign up for the USIU run! Choose your distance: <strong style={{ color: '#60a5fa' }}>5K · 10K · 21K</strong>.
+                  The registration form is open for a <strong style={{ color: '#fbbf24' }}>limited time</strong> — don&apos;t miss it!
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <a
+                    href={MARATHON_FORM_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'inline-block', background: '#f26522', color: 'white', fontWeight: 800, fontSize: 13, padding: '9px 18px', borderRadius: 10, textDecoration: 'none' }}
+                  >
+                    Register Now →
+                  </a>
+                  {daysLeft > 0 && (
+                    <span style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 20 }}>
+                      ⏳ {daysLeft} day{daysLeft !== 1 ? 's' : ''} to race day
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {winners.length > 0 && (
           <div style={{ background: 'linear-gradient(135deg,#fef9c3,#fde68a)', border: '1px solid #fcd34d', borderRadius: 16, padding: 20, marginBottom: 20 }}>
             <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 12 }}>🎉 Challenge Winners</div>
@@ -112,23 +187,35 @@ export default function LeaderboardPage() {
           </div>
         ) : (
           <div>
-            {tierGroups.map(({ tier, cfg, members }) => members.length === 0 ? null : (
-              <div key={tier} style={{ marginBottom: 32 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <span style={{ fontSize: 24 }}>{cfg.emoji}</span>
-                  <span style={{ fontWeight: 900, fontSize: 18, color: '#1f2937' }}>{cfg.label}</span>
-                  <span style={{ fontSize: 12, color: '#9ca3af' }}>{cfg.min}{cfg.max ? `–${cfg.max}` : '+'} pts</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 12, color: '#9ca3af' }}>{members.length} member{members.length !== 1 ? 's' : ''}</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {members.map((m, i) => (
-                    <div key={m.memberId} style={{ background: 'white', borderRadius: 16, padding: '14px 16px', border: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 14 }}>
-                      <span style={{ color: '#d1d5db', fontWeight: 700, fontSize: 13, width: 20, textAlign: 'center' }}>{tier === 'move_together_champions' && i === 0 ? '👑' : i+1}</span>
-                      {(() => { const rank = rankMap.get(m.memberId) ?? 0; const sticker = getSticker(rank, allActive.length, m.memberId); const { bg, border } = STICKER_BG[getStickerTier(rank, allActive.length)]; return (
+            {/* Tier header labels for the current page */}
+            {(() => {
+              let lastTier: PointTier | null = null;
+              return pageMembers.map((m, idx) => {
+                const showHeader = m.tier !== lastTier;
+                if (showHeader) lastTier = m.tier;
+                const cfg = TIER_CONFIG[m.tier];
+                const rank = rankMap.get(m.memberId) ?? 0;
+                const sticker = getSticker(rank, allActive.length, m.memberId);
+                const { bg, border } = STICKER_BG[getStickerTier(rank, allActive.length)];
+                return (
+                  <div key={m.memberId}>
+                    {showHeader && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, marginTop: idx === 0 ? 0 : 24 }}>
+                        <span style={{ fontSize: 24 }}>{cfg.emoji}</span>
+                        <span style={{ fontWeight: 900, fontSize: 18, color: '#1f2937' }}>{cfg.label}</span>
+                        <span style={{ fontSize: 12, color: '#9ca3af' }}>{cfg.min}{cfg.max ? `–${cfg.max}` : '+'} pts</span>
+                        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#9ca3af' }}>
+                          {active.filter(a => a.tier === m.tier).length} member{active.filter(a => a.tier === m.tier).length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    )}
+                    <div style={{ background: 'white', borderRadius: 16, padding: '14px 16px', border: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
+                      <span style={{ color: '#d1d5db', fontWeight: 700, fontSize: 13, width: 20, textAlign: 'center' }}>
+                        {m.tier === 'move_together_champions' && m.tierIndex === 0 ? '👑' : m.tierIndex + 1}
+                      </span>
                       <div title={`${m.memberName} · ${STICKER_LABELS[sticker] ?? sticker}`} style={{ width: 44, height: 44, borderRadius: '50%', background: bg, border: `2px solid ${border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, cursor: 'default' }}>
                         {sticker}
                       </div>
-                      ); })()}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.memberName} <span style={{ fontSize: 14 }}>{getCountryFlag(m.country, countries)}</span></div>
                         <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>🎯 {m.runSessions + m.lunchActivities + m.raceSignups + m.racesCompleted} activities · 📅 {m.activeDays} days{m.racesCompleted > 0 ? ` · 🏅 ${m.racesCompleted} race${m.racesCompleted !== 1 ? 's' : ''}` : ''}</div>
@@ -138,10 +225,33 @@ export default function LeaderboardPage() {
                         <div style={{ fontSize: 11, color: '#9ca3af' }}>points</div>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                );
+              });
+            })()}
+
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 24, marginBottom: 8 }}>
+                <button
+                  onClick={() => { setPage(p => Math.max(0, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  disabled={page === 0}
+                  style={{ padding: '8px 18px', borderRadius: 10, border: '1px solid #e5e7eb', background: page === 0 ? '#f9fafb' : 'white', color: page === 0 ? '#d1d5db' : '#374151', fontWeight: 700, fontSize: 13, cursor: page === 0 ? 'not-allowed' : 'pointer' }}
+                >
+                  ← Previous
+                </button>
+                <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>
+                  Page {page + 1} of {totalPages} <span style={{ color: '#9ca3af', fontWeight: 400 }}>({flatMembers.length} total)</span>
+                </span>
+                <button
+                  onClick={() => { setPage(p => Math.min(totalPages - 1, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  disabled={page >= totalPages - 1}
+                  style={{ padding: '8px 18px', borderRadius: 10, border: page >= totalPages - 1 ? '1px solid #e5e7eb' : '1px solid #1a7a4a', background: page >= totalPages - 1 ? '#f9fafb' : '#1a7a4a', color: page >= totalPages - 1 ? '#d1d5db' : 'white', fontWeight: 700, fontSize: 13, cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer' }}
+                >
+                  Next →
+                </button>
               </div>
-            ))}
+            )}
           </div>
         )}
 
