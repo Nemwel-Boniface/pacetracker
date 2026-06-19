@@ -1,12 +1,97 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Member, CountryConfig, getCountryFlag } from '@/types';
+import { Member, CountryConfig, MarathonDistance, getCountryFlag } from '@/types';
 import { getStickerByName, STICKER_LABELS } from '@/lib/stickers';
 
 const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, outline:'none', boxSizing:'border-box' as const };
 const btn = (bg: string) => ({ padding:'10px 20px', borderRadius:10, background:bg, color:'white', fontWeight:700, fontSize:13, border:'none', cursor:'pointer' });
 
 interface NewInviteData { member: Member; tempPassword: string; }
+
+// ─── Marathon registration row ────────────────────────────────────────────────
+function MarathonRow({ member, onUpdate }: { member: Member; onUpdate: (id: string, registered: boolean, distance?: MarathonDistance) => Promise<void> }) {
+  const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [distance, setDistance] = useState<MarathonDistance>(member.marathonDistance ?? '10k');
+
+  async function toggle() {
+    setSaving(true);
+    await onUpdate(member.id, !member.marathonRegistered, member.marathonRegistered ? undefined : distance);
+    setSaving(false);
+    if (member.marathonRegistered) setOpen(false);
+  }
+
+  async function saveDistance(d: MarathonDistance) {
+    setDistance(d);
+    setSaving(true);
+    await onUpdate(member.id, true, d);
+    setSaving(false);
+  }
+
+  if (!open && !member.marathonRegistered) {
+    return (
+      <div style={{ padding: '8px 16px', background: '#f9fafb', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          onClick={() => setOpen(true)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#6b7280', padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}
+        >
+          🏁 <span style={{ textDecoration: 'underline' }}>Register for USIU Marathon</span>
+        </button>
+      </div>
+    );
+  }
+
+  if (member.marathonRegistered) {
+    return (
+      <div style={{ padding: '10px 16px', background: 'linear-gradient(90deg,#1e3a5f,#1a4a8a)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 16 }}>🏃‍♂️</span>
+        <span style={{ fontSize: 12, color: 'white', fontWeight: 700 }}>USIU Marathon · 26 Jul 2026</span>
+        <span style={{ background: '#f26522', color: 'white', fontWeight: 800, fontSize: 11, padding: '2px 9px', borderRadius: 20 }}>{member.marathonDistance?.toUpperCase() ?? '—'}</span>
+        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+          {(['5k','10k','21k'] as MarathonDistance[]).map(d => (
+            <button
+              key={d}
+              onClick={() => saveDistance(d)}
+              disabled={saving}
+              style={{ padding: '3px 10px', borderRadius: 8, border: `1.5px solid ${member.marathonDistance === d ? '#f26522' : 'rgba(255,255,255,0.3)'}`, background: member.marathonDistance === d ? '#f26522' : 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}
+            >
+              {d}
+            </button>
+          ))}
+          <button
+            onClick={toggle}
+            disabled={saving}
+            style={{ padding: '3px 10px', borderRadius: 8, border: '1.5px solid rgba(255,100,100,0.5)', background: 'rgba(220,38,38,0.2)', color: '#fca5a5', fontWeight: 700, fontSize: 11, cursor: 'pointer', marginLeft: 4 }}
+          >
+            {saving ? '…' : '✕ Unregister'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Registration panel (open state, not yet registered)
+  return (
+    <div style={{ padding: '12px 16px', background: '#f0f9ff', borderTop: '1px solid #bae6fd', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: '#0369a1' }}>🏁 USIU Marathon distance:</span>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {(['5k','10k','21k'] as MarathonDistance[]).map(d => (
+          <button
+            key={d}
+            onClick={() => setDistance(d)}
+            style={{ padding: '5px 12px', borderRadius: 8, border: `1.5px solid ${distance === d ? '#0369a1' : '#bae6fd'}`, background: distance === d ? '#0369a1' : 'white', color: distance === d ? 'white' : '#0369a1', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+          >
+            {d}
+          </button>
+        ))}
+      </div>
+      <button onClick={toggle} disabled={saving} style={{ padding: '5px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', fontWeight: 700, fontSize: 12, border: 'none', cursor: 'pointer' }}>
+        {saving ? '…' : '✓ Mark as Registered'}
+      </button>
+      <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 12, marginLeft: 2 }}>Cancel</button>
+    </div>
+  );
+}
 
 function WelcomeMessage({ member, tempPassword, onDismiss }: { member: Member; tempPassword: string; onDismiss: () => void }) {
   const [copied, setCopied] = useState(false);
@@ -101,6 +186,10 @@ export default function MembersPage() {
   }
   async function handleToggle(id:string){ const res=await fetch('/api/members',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,action:'toggle'})}); const d=await res.json(); if(res.ok)setMembers(p=>p.map(m=>m.id===id?d.member:m)); }
   async function handleDelete(id:string,name:string){ if(!confirm(`Remove ${name}?`))return; await fetch(`/api/members?id=${id}`,{method:'DELETE'}); setMembers(p=>p.filter(m=>m.id!==id)); }
+  async function handleMarathonUpdate(id:string, marathonRegistered:boolean, marathonDistance?:MarathonDistance){
+    const res=await fetch('/api/members',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,marathonRegistered,...(marathonDistance?{marathonDistance}:{marathonDistance:null})})});
+    const d=await res.json(); if(res.ok)setMembers(p=>p.map(m=>m.id===id?d.member:m));
+  }
 
   const counts = {
     all:      members.length,
@@ -255,6 +344,9 @@ export default function MembersPage() {
                   <span style={{fontSize:12,color:'#fde68a',fontWeight:600}}>✉️ Awaiting invite acceptance</span>
                   <span style={{fontSize:11,color:'#fbbf24'}}>Hidden from leaderboard until they sign in and set a password</span>
                 </div>
+              )}
+              {!m.isShadowUser && (
+                <MarathonRow member={m} onUpdate={handleMarathonUpdate} />
               )}
             </div>
           );
