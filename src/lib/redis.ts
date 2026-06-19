@@ -23,4 +23,5 @@ export const KEYS = {
   feedbackItem: (id: string) => `pt:fb:${id}`,
   memberFeedback: (memberId: string) => `pt:mfb:${memberId}`,
   groupActivityLogs: (activityId: string) => `pt:gact:${activityId}`,
+  settings: 'pt:settings',
 };
