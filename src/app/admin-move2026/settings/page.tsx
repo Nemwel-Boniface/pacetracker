@@ -16,6 +16,11 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
 
+  const [marathonBannerEnabled, setMarathonBannerEnabled] = useState(true);
+  const [marathonCountries, setMarathonCountries] = useState<string[]>([]);
+  const [togglingBanner, setTogglingBanner] = useState(false);
+  const [savingCountries, setSavingCountries] = useState(false);
+
   const [dangerUnlocked, setDangerUnlocked] = useState(false);
   const [dangerPassword, setDangerPassword] = useState('');
   const [unlocking, setUnlocking] = useState(false);
@@ -47,8 +52,39 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    fetch('/api/countries').then(r => r.json()).then(d => setCountries(d.countries || [])).catch(() => {}).finally(() => setLoading(false));
+    Promise.all([
+      fetch('/api/countries').then(r => r.json()),
+      fetch('/api/admin/settings').then(r => r.json()),
+    ]).then(([cd, sd]) => {
+      setCountries(cd.countries || []);
+      setMarathonBannerEnabled(sd.settings?.marathonBannerEnabled ?? true);
+      setMarathonCountries(sd.settings?.marathonCountries ?? []);
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  async function handleToggleBanner() {
+    setTogglingBanner(true);
+    try {
+      const res = await fetch('/api/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marathonBannerEnabled: !marathonBannerEnabled }) });
+      const data = await res.json();
+      if (res.ok) setMarathonBannerEnabled(data.settings.marathonBannerEnabled);
+    } catch { /* silent */ } finally { setTogglingBanner(false); }
+  }
+
+  async function saveMarathonCountries(next: string[]) {
+    setMarathonCountries(next);
+    setSavingCountries(true);
+    try {
+      await fetch('/api/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marathonCountries: next }) });
+    } catch { /* silent */ } finally { setSavingCountries(false); }
+  }
+
+  function toggleMarathonCountry(name: string) {
+    const next = marathonCountries.includes(name)
+      ? marathonCountries.filter(c => c !== name)
+      : [...marathonCountries, name];
+    saveMarathonCountries(next);
+  }
 
   async function handleToggle(name: string) {
     const slug = name.toLowerCase().replace(/\s+/g, '_');
@@ -165,6 +201,82 @@ export default function SettingsPage() {
           </div>
         </>
       )}
+      {/* ─── Marathon Banner ─── */}
+      <div style={{ marginTop: 32, background: 'white', borderRadius: 16, border: '1px solid #e0e7ef', overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#1a4a8a)', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 20 }}>🏃‍♂️</span>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: 'white' }}>USIU Marathon — 26 July 2026</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>Public leaderboard registration banner · member dashboard countdown</div>
+          </div>
+          <button
+            onClick={handleToggleBanner}
+            disabled={togglingBanner}
+            style={{ marginLeft: 'auto', flexShrink: 0, padding: '7px 16px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13, cursor: togglingBanner ? 'not-allowed' : 'pointer', background: marathonBannerEnabled ? '#16a34a' : '#6b7280', color: 'white', opacity: togglingBanner ? 0.6 : 1 }}
+          >
+            {togglingBanner ? '…' : marathonBannerEnabled ? '🟢 Banner On' : '⚫ Banner Off'}
+          </button>
+        </div>
+
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
+          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 2 }}>
+            {marathonBannerEnabled
+              ? <><span style={{ color: '#16a34a', fontWeight: 700 }}>✅ Public banner showing</span> — registration link visible on the leaderboard. Toggle off once registrations close.</>
+              : <><span style={{ color: '#6b7280', fontWeight: 700 }}>⚫ Banner hidden</span> — not shown on the leaderboard.</>}
+          </div>
+        </div>
+
+        {/* Country targeting for member countdown */}
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#374151', marginBottom: 4 }}>Member dashboard countdown — visible to</div>
+          <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 12 }}>
+            The personal days-to-race counter on the member dashboard is only shown to registered members from the selected countries. Choose &ldquo;All Countries&rdquo; to show it to everyone who is marked as registered.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {/* All countries chip */}
+            <button
+              onClick={() => saveMarathonCountries([])}
+              disabled={savingCountries}
+              style={{
+                padding: '6px 14px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                border: marathonCountries.length === 0 ? 'none' : '1.5px solid #e5e7eb',
+                background: marathonCountries.length === 0 ? '#1a7a4a' : 'white',
+                color: marathonCountries.length === 0 ? 'white' : '#374151',
+                opacity: savingCountries ? 0.6 : 1,
+              }}
+            >
+              🌍 All Countries {marathonCountries.length === 0 && '✓'}
+            </button>
+            {/* Per-country chips (active countries only) */}
+            {countries.filter(c => c.isActive).map(c => {
+              const selected = marathonCountries.includes(c.name);
+              return (
+                <button
+                  key={c.name}
+                  onClick={() => toggleMarathonCountry(c.name)}
+                  disabled={savingCountries}
+                  style={{
+                    padding: '6px 14px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    border: selected ? 'none' : '1.5px solid #e5e7eb',
+                    background: selected ? '#1e3a5f' : 'white',
+                    color: selected ? 'white' : '#374151',
+                    opacity: savingCountries ? 0.6 : 1,
+                  }}
+                >
+                  {c.flag} {c.name} {selected && '✓'}
+                </button>
+              );
+            })}
+          </div>
+          {marathonCountries.length > 0 && (
+            <div style={{ marginTop: 10, fontSize: 12, color: '#0369a1', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '7px 12px' }}>
+              Countdown visible to registered members from: <strong>{marathonCountries.join(', ')}</strong>
+              {savingCountries && <span style={{ color: '#9ca3af', marginLeft: 8 }}>Saving…</span>}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ─── Danger Zone ─── */}
       <div style={{ marginTop: 40, border: '2px solid #fecaca', borderRadius: 16, overflow: 'hidden' }}>
         <div style={{ background: '#fef2f2', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, borderBottom: '1px solid #fecaca' }}>
