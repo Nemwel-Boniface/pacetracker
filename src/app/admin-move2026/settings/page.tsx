@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { CountryConfig } from '@/types';
 
@@ -21,6 +21,9 @@ export default function SettingsPage() {
   const [togglingBanner, setTogglingBanner] = useState(false);
   const [savingCountries, setSavingCountries] = useState(false);
 
+  const [exportMeta, setExportMeta] = useState<{ generatedAt: string; sizeBytes: number } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [downloadingCached, setDownloadingCached] = useState(false);
   const [dangerUnlocked, setDangerUnlocked] = useState(false);
   const [dangerPassword, setDangerPassword] = useState('');
   const [unlocking, setUnlocking] = useState(false);
@@ -55,12 +58,41 @@ export default function SettingsPage() {
     Promise.all([
       fetch('/api/countries').then(r => r.json()),
       fetch('/api/admin/settings').then(r => r.json()),
-    ]).then(([cd, sd]) => {
+      fetch('/api/admin/export?meta').then(r => r.json()).catch(() => ({ meta: null })),
+    ]).then(([cd, sd, ex]) => {
       setCountries(cd.countries || []);
       setMarathonBannerEnabled(sd.settings?.marathonBannerEnabled ?? true);
       setMarathonCountries(sd.settings?.marathonCountries ?? []);
+      setExportMeta(ex.meta || null);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  const handleExportFresh = useCallback(async () => {
+    setExporting(true);
+    try {
+      const res = await fetch('/api/admin/export');
+      if (!res.ok) { alert('Export failed — try again'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `pacetracker-backup-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click(); URL.revokeObjectURL(url);
+    } catch { alert('Export failed — connection error'); } finally { setExporting(false); }
+  }, []);
+
+  const handleDownloadCached = useCallback(async () => {
+    setDownloadingCached(true);
+    try {
+      const res = await fetch('/api/admin/export?cached');
+      if (res.status === 404) { alert('No scheduled export available yet. Use "Generate Fresh Export" or wait for the daily cron to run.'); return; }
+      if (!res.ok) { alert('Download failed — try again'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `pacetracker-backup-${exportMeta?.generatedAt?.slice(0, 10) ?? 'latest'}.xlsx`;
+      a.click(); URL.revokeObjectURL(url);
+    } catch { alert('Download failed — connection error'); } finally { setDownloadingCached(false); }
+  }, [exportMeta]);
 
   async function handleToggleBanner() {
     setTogglingBanner(true);
@@ -274,6 +306,53 @@ export default function SettingsPage() {
               {savingCountries && <span style={{ color: '#9ca3af', marginLeft: 8 }}>Saving…</span>}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ─── Data Backup ─── */}
+      <div style={{ marginTop: 32, background: 'white', borderRadius: 16, border: '1px solid #e0e7ef', overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ background: 'linear-gradient(135deg,#0f4c81,#1a6aad)', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 20 }}>💾</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, color: 'white' }}>Data Backup</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>Full Excel export — members, activities, prizes, winners, feedback, countries, settings</div>
+          </div>
+        </div>
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Cron status */}
+          <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#0369a1' }}>
+            <strong>Daily auto-backup:</strong> runs every day at midnight EAT (21:00 UTC) via Vercel cron.{' '}
+            {exportMeta
+              ? <span style={{ color: '#166534', fontWeight: 600 }}>Last backup: {new Date(exportMeta.generatedAt).toLocaleString()} · {(exportMeta.sizeBytes / 1024).toFixed(0)} KB</span>
+              : <span style={{ color: '#92400e' }}>No scheduled backup yet — run one manually or wait for tonight&apos;s cron.</span>}
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {/* Fresh export */}
+            <button
+              onClick={handleExportFresh}
+              disabled={exporting}
+              style={{ padding: '10px 20px', borderRadius: 10, background: exporting ? '#9ca3af' : '#0f4c81', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: exporting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+            >
+              {exporting ? '⏳ Generating…' : '⬇ Generate Fresh Export'}
+            </button>
+
+            {/* Cached export */}
+            {exportMeta && (
+              <button
+                onClick={handleDownloadCached}
+                disabled={downloadingCached}
+                style={{ padding: '10px 20px', borderRadius: 10, background: 'white', color: '#0f4c81', fontWeight: 700, fontSize: 13, border: '2px solid #0f4c81', cursor: downloadingCached ? 'not-allowed' : 'pointer', opacity: downloadingCached ? 0.6 : 1 }}
+              >
+                {downloadingCached ? '⏳ Downloading…' : `⬇ Download Last Backup (${exportMeta.generatedAt.slice(0, 10)})`}
+              </button>
+            )}
+          </div>
+
+          <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6 }}>
+            The export includes: member accounts (with password hashes), all activity logs, computed leaderboard stats, prize categories, winners, feedback tickets, country configs, app settings, and the email index.
+            The <strong>Restore Guide</strong> sheet inside the Excel explains step-by-step how to load this data into a fresh Upstash database.
+          </div>
         </div>
       </div>
 
