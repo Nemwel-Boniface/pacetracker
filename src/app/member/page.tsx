@@ -4,6 +4,7 @@ import { MemberStats, CountryConfig, TIER_CONFIG, PointTier, getCountryFlag, Mem
 import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
 
 const MARATHON_DATE = new Date('2026-07-26T07:00:00+03:00');
+const SHOW_SYSTEM_NOTICE = true;
 const DISTANCE_LABELS: Record<string, string> = { '5k': '5K', '10k': '10K', '21k': '21K Half Marathon' };
 
 function daysUntilMarathon(): number {
@@ -17,6 +18,7 @@ export default function MemberLeaderboardPage() {
   const [me, setMe] = useState<Member | null>(null);
   const [filter, setFilter] = useState<string>('All');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState('');
 
   const [marathonCountries, setMarathonCountries] = useState<string[]>([]);
@@ -36,10 +38,10 @@ export default function MemberLeaderboardPage() {
       setMe(meData.member || null);
       setMarathonCountries(stData.settings?.marathonCountries ?? []);
       setLastUpdated(new Date().toLocaleTimeString());
-    } catch { setStats([]); } finally { setLoading(false); }
+    } catch { setStats([]); } finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useEffect(() => { fetchData(); const t = setInterval(fetchData, 60000); return () => clearInterval(t); }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const allActive = stats.filter(s => s.isActive);
   const rankMap = new Map(allActive.map((m, i) => [m.memberId, i + 1]));
@@ -55,6 +57,19 @@ export default function MemberLeaderboardPage() {
 
   return (
     <div>
+      {/* System notice banner */}
+      {SHOW_SYSTEM_NOTICE && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>🛡️</span>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: '#92400e', marginBottom: 3 }}>System notice — your data is safe</div>
+            <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.55 }}>
+              We identified an issue that briefly affected the live leaderboard refresh. <strong>All your activity data is fully intact.</strong> Our team has spotted and is actively resolving this — the leaderboard will update normally again shortly. Thank you for your patience! 🏃‍♂️
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Marathon countdown card — shown only to registered members in allowed countries */}
       {showMarathonCountdown && (
         <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#1a4a8a)', borderRadius: 16, padding: '16px 20px', marginBottom: 20, border: '1px solid #3b5999', position: 'relative', overflow: 'hidden' }}>
@@ -97,7 +112,16 @@ export default function MemberLeaderboardPage() {
             {c.flag} {c.name}
           </button>
         ))}
-        {lastUpdated && <span style={{ flexShrink: 0, fontSize: 11, color: '#9ca3af', alignSelf: 'center', marginLeft: 'auto' }}>Updated {lastUpdated}</span>}
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+          {lastUpdated && <span style={{ fontSize: 11, color: '#9ca3af' }}>Updated {lastUpdated}</span>}
+          <button
+            onClick={() => { setRefreshing(true); fetchData(); }}
+            disabled={refreshing}
+            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: 'white', color: '#374151', fontSize: 12, fontWeight: 600, cursor: refreshing ? 'not-allowed' : 'pointer', opacity: refreshing ? 0.6 : 1 }}
+          >
+            {refreshing ? '…' : '↻ Refresh'}
+          </button>
+        </div>
       </div>
 
       {loading ? (
