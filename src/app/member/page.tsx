@@ -4,7 +4,6 @@ import { MemberStats, CountryConfig, TIER_CONFIG, PointTier, getCountryFlag, Mem
 import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
 
 const MARATHON_DATE = new Date('2026-07-26T07:00:00+03:00');
-const SHOW_SYSTEM_NOTICE = true;
 const DISTANCE_LABELS: Record<string, string> = { '5k': '5K', '10k': '10K', '21k': '21K Half Marathon' };
 
 function daysUntilMarathon(): number {
@@ -57,19 +56,6 @@ export default function MemberLeaderboardPage() {
 
   return (
     <div>
-      {/* System notice banner */}
-      {SHOW_SYSTEM_NOTICE && (
-        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>🛡️</span>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 14, color: '#92400e', marginBottom: 3 }}>System notice — your data is safe</div>
-            <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.55 }}>
-              We identified an issue that briefly affected the live leaderboard refresh. <strong>All your activity data is fully intact.</strong> Our team has spotted and is actively resolving this — the leaderboard will update normally again shortly. Thank you for your patience! 🏃‍♂️
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Marathon countdown card — shown only to registered members in allowed countries */}
       {showMarathonCountdown && (
         <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#1a4a8a)', borderRadius: 16, padding: '16px 20px', marginBottom: 20, border: '1px solid #3b5999', position: 'relative', overflow: 'hidden' }}>

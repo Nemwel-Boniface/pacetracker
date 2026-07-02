@@ -6,8 +6,6 @@ import Link from 'next/link';
 
 const PAGE_SIZE = 10;
 const MARATHON_DATE = new Date('2026-07-26T07:00:00+03:00');
-const SHOW_SYSTEM_NOTICE = true;
-const MARATHON_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSfSWEla_XCfgDYQNdxP3gHJb-loUzQvFaHIQ-K_Kyjv_CGzpw/viewform?usp=header';
 
 function daysUntilMarathon(): number {
   const now = new Date();
@@ -96,20 +94,7 @@ export default function LeaderboardPage() {
 
       <main style={{ maxWidth: 768, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* System notice banner */}
-        {SHOW_SYSTEM_NOTICE && (
-          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>🛡️</span>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: '#92400e', marginBottom: 3 }}>System notice — your data is safe</div>
-              <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.55 }}>
-                We identified an issue that briefly affected the live leaderboard refresh. <strong>All your activity data is fully intact.</strong> Our team has spotted and is actively resolving this — the leaderboard will update normally again shortly. Thank you for your patience! 🏃‍♂️
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Marathon registration CTA banner */}
+        {/* Marathon notice banner */}
         {marathonBannerEnabled && (
           <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#1a4a8a)', borderRadius: 16, padding: '18px 20px', marginBottom: 20, border: '1px solid #3b5999', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: -20, right: -20, fontSize: 80, opacity: 0.08 }}>🏅</div>
@@ -128,18 +113,9 @@ export default function LeaderboardPage() {
                   )}
                 </div>
                 <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginBottom: 10, lineHeight: 1.5 }}>
-                  Sign up for the USIU run! Choose your distance: <strong style={{ color: '#60a5fa' }}>5K · 10K · 21K</strong>.
-                  The registration form is open for a <strong style={{ color: '#fbbf24' }}>limited time</strong> — don&apos;t miss it!
+                  Mark your calendar! The USIU run is coming up, with distances of <strong style={{ color: '#60a5fa' }}>5K · 10K · 21K</strong> on offer.
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <a
-                    href={MARATHON_FORM_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ display: 'inline-block', background: '#f26522', color: 'white', fontWeight: 800, fontSize: 13, padding: '9px 18px', borderRadius: 10, textDecoration: 'none' }}
-                  >
-                    Register Now →
-                  </a>
                   {daysLeft > 0 && (
                     <span style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 20 }}>
                       ⏳ {daysLeft} day{daysLeft !== 1 ? 's' : ''} to race day
