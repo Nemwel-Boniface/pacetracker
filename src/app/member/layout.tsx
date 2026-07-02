@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import MarathonNotice from './MarathonNotice';
 
 export default function MemberLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -28,6 +29,7 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8' }}>
+      <MarathonNotice />
       <header style={{ background: 'linear-gradient(135deg,#145c38 0%,#1a7a4a 60%,#f26522 100%)', color: 'white' }}>
         <div style={{ maxWidth: 768, margin: '0 auto', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
