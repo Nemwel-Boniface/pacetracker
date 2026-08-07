@@ -8,9 +8,11 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
   const router = useRouter();
   const pathname = usePathname();
   const [memberName, setMemberName] = useState('');
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
 
   useEffect(() => {
     fetch('/api/auth/member/me').then(r => r.json()).then(d => { if (d.member) setMemberName(d.member.name.split(' ')[0]); }).catch(() => {});
+    fetch('/api/member/challenges').then(r => r.json()).then(d => setPendingInviteCount((d.invites || []).length)).catch(() => {});
   }, []);
 
   async function logout() {
@@ -22,6 +24,7 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
     { href: '/member', label: '🏆 Leaderboard', exact: true },
     { href: '/member/stats', label: '📊 My Stats' },
     { href: '/member/streaks', label: '🔥 My Streak' },
+    { href: '/member/challenges', label: '🏁 Challenges' },
     { href: '/member/log', label: '➕ Log Activity' },
     { href: '/member/feedback', label: '💬 Feedback' },
     { href: '/member/how-it-works', label: '📖 How It Works' },
@@ -45,8 +48,11 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
           {tabs.map(tab => {
             const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
             return (
-              <Link key={tab.href} href={tab.href} style={{ flexShrink: 0, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: active ? 'white' : 'rgba(255,255,255,0.6)', textDecoration: 'none', borderBottom: active ? '2px solid white' : '2px solid transparent', whiteSpace: 'nowrap' }}>
+              <Link key={tab.href} href={tab.href} style={{ flexShrink: 0, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: active ? 'white' : 'rgba(255,255,255,0.6)', textDecoration: 'none', borderBottom: active ? '2px solid white' : '2px solid transparent', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
                 {tab.label}
+                {tab.href === '/member/challenges' && pendingInviteCount > 0 && (
+                  <span style={{ background: '#f26522', color: 'white', fontSize: 11, fontWeight: 800, padding: '1px 7px', borderRadius: 20 }}>{pendingInviteCount}</span>
+                )}
               </Link>
             );
           })}

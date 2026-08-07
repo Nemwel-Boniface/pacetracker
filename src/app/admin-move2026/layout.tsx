@@ -8,6 +8,7 @@ const NAV = [
   { href: '/admin-move2026/members', label: '👥 Members' },
   { href: '/admin-move2026/activities', label: '📅 Log Activities' },
   { href: '/admin-move2026/leaderboard', label: '🏆 Generate Board' },
+  { href: '/admin-move2026/challenges', label: '🏁 Challenges' },
   { href: '/admin-move2026/prizes', label: '🎁 Prizes' },
   { href: '/admin-move2026/winners', label: '🥇 Winners' },
   { href: '/admin-move2026/feedback', label: '📬 Feedback' },
