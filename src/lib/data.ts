@@ -1,5 +1,5 @@
 import { getRedis, KEYS } from './redis';
-import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier } from '@/types';
+import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier, Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengePace, CHALLENGE_CATEGORY_ACTIVITY_TYPES, CHALLENGE_PERIOD_DAYS } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 
@@ -251,6 +251,85 @@ export async function updateFeedback(id: string, patch: Partial<Feedback>): Prom
   const updated = { ...fb, ...patch };
   await r.set(KEYS.feedbackItem(id), updated);
   return updated;
+}
+
+// ─── Challenges ──────────────────────────────────────────────────────────────
+export async function getChallenge(id: string): Promise<Challenge | null> {
+  return getRedis().get<Challenge>(KEYS.challenge(id));
+}
+export async function saveChallenge(c: Challenge): Promise<void> {
+  const r = getRedis();
+  await Promise.all([
+    r.set(KEYS.challenge(c.id), c),
+    r.sadd(KEYS.challenges, c.id),
+    r.sadd(KEYS.memberChallenges(c.ownerId), c.id),
+  ]);
+}
+export async function getAllChallenges(): Promise<Challenge[]> {
+  const r = getRedis(); const ids = await r.smembers(KEYS.challenges);
+  if (!ids?.length) return [];
+  const items = await Promise.all(ids.map(id => r.get<Challenge>(KEYS.challenge(id))));
+  return (items.filter(Boolean) as Challenge[]).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+export async function getMemberChallenges(memberId: string): Promise<Challenge[]> {
+  const r = getRedis(); const ids = await r.smembers(KEYS.memberChallenges(memberId));
+  if (!ids?.length) return [];
+  const items = await Promise.all(ids.map(id => r.get<Challenge>(KEYS.challenge(id))));
+  return (items.filter(Boolean) as Challenge[]).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+export async function getChallengeParticipant(challengeId: string, memberId: string): Promise<ChallengeParticipant | null> {
+  return getRedis().get<ChallengeParticipant>(KEYS.challengeParticipant(challengeId, memberId));
+}
+export async function saveChallengeParticipant(p: ChallengeParticipant): Promise<void> {
+  const r = getRedis();
+  await Promise.all([
+    r.set(KEYS.challengeParticipant(p.challengeId, p.memberId), p),
+    r.sadd(KEYS.challengeParticipants(p.challengeId), p.memberId),
+    r.sadd(KEYS.memberChallenges(p.memberId), p.challengeId),
+  ]);
+}
+export async function getChallengeParticipants(challengeId: string): Promise<ChallengeParticipant[]> {
+  const r = getRedis(); const memberIds = await r.smembers(KEYS.challengeParticipants(challengeId));
+  if (!memberIds?.length) return [];
+  const items = await Promise.all(memberIds.map(id => r.get<ChallengeParticipant>(KEYS.challengeParticipant(challengeId, id))));
+  return items.filter(Boolean) as ChallengeParticipant[];
+}
+
+function daysBetween(a: string, b: string): number {
+  const da = new Date(a + 'T12:00:00Z').getTime();
+  const db = new Date(b + 'T12:00:00Z').getTime();
+  return Math.round((db - da) / 86400000);
+}
+
+export async function computeChallengeProgress(challenge: Challenge, memberId: string): Promise<number> {
+  const activities = await getMemberActivities(memberId);
+  const types = CHALLENGE_CATEGORY_ACTIVITY_TYPES[challenge.category];
+  const km = activities
+    .filter(a => types.includes(a.activityType) && a.date >= challenge.startDate && a.date <= challenge.endDate && a.distance != null)
+    .reduce((sum, a) => sum + (a.distance ?? 0), 0);
+  return Math.round(km * 10) / 10;
+}
+
+export function computeChallengePace(challenge: Challenge, progressKm: number): ChallengePace {
+  const periodDays = CHALLENGE_PERIOD_DAYS[challenge.period];
+  const today = new Date().toISOString().slice(0, 10);
+  const clampedToday = today < challenge.endDate ? today : challenge.endDate;
+  const daysElapsed = Math.min(periodDays, Math.max(1, daysBetween(challenge.startDate, clampedToday) + 1));
+  const expectedKm = Math.round(challenge.goalKm * (daysElapsed / periodDays) * 10) / 10;
+  const percentage = Math.min(100, Math.round((progressKm / challenge.goalKm) * 100));
+  return { percentage, expectedKm, onPace: progressKm >= expectedKm, daysElapsed, daysRemaining: Math.max(0, periodDays - daysElapsed), periodDays };
+}
+
+export async function getChallengeLeaderboard(challenge: Challenge): Promise<ChallengeLeaderboardEntry[]> {
+  const participants = (await getChallengeParticipants(challenge.id)).filter(p => p.status === 'accepted');
+  const entries = await Promise.all(participants.map(async p => {
+    const progressKm = await computeChallengeProgress(challenge, p.memberId);
+    const percentage = Math.min(100, Math.round((progressKm / challenge.goalKm) * 100));
+    return { memberId: p.memberId, memberName: p.memberName, progressKm, percentage, rank: 0 };
+  }));
+  entries.sort((a, b) => b.progressKm - a.progressKm);
+  entries.forEach((e, i) => { e.rank = i + 1; });
+  return entries;
 }
 
 // Re-export for convenience
