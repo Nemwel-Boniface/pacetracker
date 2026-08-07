@@ -42,6 +42,59 @@ export function getTier(points: number): PointTier {
 export function getCountryFlag(country: string, configs: CountryConfig[]): string {
   return configs.find(c => c.name === country)?.flag || '🌍';
 }
+
+export type ChallengeCategory = 'run_walk' | 'cycling';
+export type ChallengePeriod = 'weekly' | 'monthly';
+export type ChallengeStatus = 'active' | 'cancelled';
+export type ChallengeInviteStatus = 'pending' | 'accepted' | 'declined' | 'left';
+
+export interface Challenge {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+  title: string;
+  category: ChallengeCategory;
+  period: ChallengePeriod;
+  goalKm: number;
+  startDate: string;
+  endDate: string;
+  status: ChallengeStatus;
+  createdAt: string;
+}
+export interface ChallengeParticipant {
+  challengeId: string;
+  memberId: string;
+  memberName: string;
+  status: ChallengeInviteStatus;
+  invitedBy: string;
+  invitedByName: string;
+  invitedAt: string;
+  respondedAt?: string;
+}
+export interface ChallengeLeaderboardEntry { memberId: string; memberName: string; progressKm: number; percentage: number; rank: number; }
+export interface ChallengePace { percentage: number; expectedKm: number; onPace: boolean; daysElapsed: number; daysRemaining: number; periodDays: number; }
+
+export const CHALLENGE_CATEGORY_ACTIVITY_TYPES: Record<ChallengeCategory, ActivityType[]> = {
+  run_walk: ['run', 'walk', 'hike'],
+  cycling: ['cycling'],
+};
+export const CHALLENGE_CATEGORY_LABELS: Record<ChallengeCategory, string> = {
+  run_walk: '🏃 Run / Walk / Hike',
+  cycling: '🚴 Cycling',
+};
+export const CHALLENGE_PERIOD_LABELS: Record<ChallengePeriod, string> = { weekly: 'Weekly', monthly: 'Monthly' };
+export const CHALLENGE_PERIOD_DAYS: Record<ChallengePeriod, number> = { weekly: 7, monthly: 30 };
+
+export function computeChallengeEndDate(startDate: string, period: ChallengePeriod): string {
+  const d = new Date(startDate + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + CHALLENGE_PERIOD_DAYS[period] - 1);
+  return d.toISOString().slice(0, 10);
+}
+export function getChallengeDisplayStatus(c: Challenge): 'active' | 'ended' | 'cancelled' {
+  if (c.status === 'cancelled') return 'cancelled';
+  const today = new Date().toISOString().slice(0, 10);
+  return today > c.endDate ? 'ended' : 'active';
+}
 export const DEFAULT_COUNTRIES: CountryConfig[] = [
   { name: 'Kenya', flag: '🇰🇪', isActive: true },
   { name: 'Rwanda', flag: '🇷🇼', isActive: true },

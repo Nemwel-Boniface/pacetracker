@@ -24,4 +24,9 @@ export const KEYS = {
   memberFeedback: (memberId: string) => `pt:mfb:${memberId}`,
   groupActivityLogs: (activityId: string) => `pt:gact:${activityId}`,
   settings: 'pt:settings',
+  challenges: 'pt:challenges',
+  challenge: (id: string) => `pt:chal:${id}`,
+  memberChallenges: (memberId: string) => `pt:mchal:${memberId}`,
+  challengeParticipants: (challengeId: string) => `pt:chalp:${challengeId}`,
+  challengeParticipant: (challengeId: string, memberId: string) => `pt:chalp:${challengeId}:${memberId}`,
 };
