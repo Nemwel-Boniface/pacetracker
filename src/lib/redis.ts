@@ -30,4 +30,5 @@ export const KEYS = {
   challengeParticipants: (challengeId: string) => `pt:chalp:${challengeId}`,
   challengeParticipant: (challengeId: string, memberId: string) => `pt:chalp:${challengeId}:${memberId}`,
   methali: 'pt:methali',
+  triviaGame: (challengeId: string) => `pt:triviagame:${challengeId}`,
 };
