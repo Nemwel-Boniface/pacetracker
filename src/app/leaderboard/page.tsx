@@ -73,7 +73,7 @@ export default function LeaderboardPage() {
               <span style={{ fontWeight: 900, fontSize: 18 }}>PaceTracker</span>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <Link href="/methali-trivia" style={{ color: 'white', fontSize: 13, textDecoration: 'none', background: 'rgba(255,255,255,0.2)', padding: '6px 14px', borderRadius: 8, fontWeight: 700 }}>🏛️ Methali Trivia</Link>
+              <Link href="/trivias" style={{ color: 'white', fontSize: 13, textDecoration: 'none', background: 'rgba(255,255,255,0.2)', padding: '6px 14px', borderRadius: 8, fontWeight: 700 }}>🧩 Trivias</Link>
               <Link href="/authenticate" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, textDecoration: 'none', background: 'rgba(255,255,255,0.15)', padding: '6px 14px', borderRadius: 8, fontWeight: 600 }}>Sign In</Link>
               <Link href="/how-it-works" style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, textDecoration: 'underline' }}>How points work</Link>
             </div>
