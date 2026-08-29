@@ -12,6 +12,9 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     const { id } = await params;
     const challenge = await getChallenge(id);
     if (!challenge) return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
+    // Trivia challenges have no participant/leaderboard flow — the page dispatches on `kind` and
+    // fetches trivia state from /api/challenges/[id]/trivia (permission-checked there) instead.
+    if (challenge.kind === 'trivia') return NextResponse.json({ kind: 'trivia', challenge });
 
     const myParticipant = await getChallengeParticipant(id, session.memberId);
     if (!myParticipant) return NextResponse.json({ error: 'You are not part of this challenge' }, { status: 403 });
