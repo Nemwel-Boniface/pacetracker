@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 
 type TeamId = 'simba' | 'kifaru' | 'chui';
 type Phase = 'idle' | 'test' | 'main' | 'tiebreak' | 'finished';
@@ -90,7 +91,8 @@ export default function AdminMethaliTriviaPage() {
   return (
     <div style={{ padding: '16px 12px', maxWidth: 900, margin: '0 auto', boxSizing: 'border-box' }}>
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 'clamp(21px,5vw,26px)', fontWeight: 900, color: '#1f2937', margin: 0 }}>🏛️ Methali Trivia</h1>
+        <Link href="/admin-move2026/challenges" style={{ fontSize: 12, color: '#6b7280', textDecoration: 'none' }}>← All Challenges</Link>
+        <h1 style={{ fontSize: 'clamp(21px,5vw,26px)', fontWeight: 900, color: '#1f2937', margin: '4px 0 0' }}>🏛️ Methali Trivia</h1>
         <p style={{ color: '#6b7280', fontSize: 13, margin: '4px 0 0' }}>Run the live game, log points, manage rosters.</p>
       </div>
 
