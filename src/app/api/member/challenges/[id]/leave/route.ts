@@ -11,6 +11,7 @@ export async function POST(_req: NextRequest, { params }: RouteCtx) {
     const { id } = await params;
     const challenge = await getChallenge(id);
     if (!challenge) return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
+    if (challenge.kind === 'trivia') return NextResponse.json({ error: 'Trivia challenges have no participant list to leave' }, { status: 400 });
     if (challenge.ownerId === session.memberId) return NextResponse.json({ error: 'Owners must cancel the challenge instead of leaving' }, { status: 403 });
 
     const participant = await getChallengeParticipant(id, session.memberId);
