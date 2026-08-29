@@ -12,6 +12,7 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
     const { id } = await params;
     const challenge = await getChallenge(id);
     if (!challenge) return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
+    if (challenge.kind === 'trivia') return NextResponse.json({ error: 'Trivia challenges assign teams directly — see the trivia control panel' }, { status: 400 });
     if (challenge.ownerId !== session.memberId) return NextResponse.json({ error: 'Only the owner can invite members' }, { status: 403 });
     if (getChallengeDisplayStatus(challenge) !== 'active') return NextResponse.json({ error: 'This challenge is no longer active' }, { status: 400 });
 

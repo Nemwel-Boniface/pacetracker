@@ -13,13 +13,15 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
     const { action } = await req.json();
     if (action !== 'accept' && action !== 'decline') return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
 
+    const existingChallenge = await getChallenge(id);
+    if (existingChallenge?.kind === 'trivia') return NextResponse.json({ error: 'Trivia challenges have no invites to respond to' }, { status: 400 });
+
     const participant = await getChallengeParticipant(id, session.memberId);
     if (!participant) return NextResponse.json({ error: 'You were not invited to this challenge' }, { status: 404 });
     if (participant.status !== 'pending') return NextResponse.json({ error: 'You have already responded to this invite' }, { status: 409 });
 
     if (action === 'accept') {
-      const challenge = await getChallenge(id);
-      if (!challenge || getChallengeDisplayStatus(challenge) !== 'active') {
+      if (!existingChallenge || getChallengeDisplayStatus(existingChallenge) !== 'active') {
         return NextResponse.json({ error: 'This challenge has already ended' }, { status: 400 });
       }
     }
