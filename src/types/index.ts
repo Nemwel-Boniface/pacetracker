@@ -47,17 +47,26 @@ export type ChallengeCategory = 'run_walk' | 'cycling';
 export type ChallengePeriod = 'weekly' | 'monthly';
 export type ChallengeStatus = 'active' | 'cancelled';
 export type ChallengeInviteStatus = 'pending' | 'accepted' | 'declined' | 'left';
+// A Challenge with no `kind` is a legacy record — always treat it as 'distance', never write a backfill.
+export type ChallengeKind = 'distance' | 'trivia';
 
 export interface Challenge {
   id: string;
   ownerId: string;
   ownerName: string;
   title: string;
-  category: ChallengeCategory;
-  period: ChallengePeriod;
-  goalKm: number;
-  startDate: string;
-  endDate: string;
+  kind?: ChallengeKind;
+  // True only for the single historical Trivia record backfilled from the standalone Methali game.
+  // That game is a separate live system (its own Redis key, its own admin/public pages) — this
+  // entry exists so it's discoverable in the unified Trivias list, but "Manage"/"view live" should
+  // always route to the real Methali pages, never to this record's own (frozen) control panel.
+  isLegacyMethali?: boolean;
+  // Distance-only fields — required in practice when kind is 'distance' (or omitted), unused for 'trivia'.
+  category?: ChallengeCategory;
+  period?: ChallengePeriod;
+  goalKm?: number;
+  startDate?: string;
+  endDate?: string;
   status: ChallengeStatus;
   createdAt: string;
 }
@@ -90,10 +99,11 @@ export function computeChallengeEndDate(startDate: string, period: ChallengePeri
   d.setUTCDate(d.getUTCDate() + CHALLENGE_PERIOD_DAYS[period] - 1);
   return d.toISOString().slice(0, 10);
 }
+// Distance-goal challenges only (kind !== 'trivia') — trivia challenges compute their own status from game phase.
 export function getChallengeDisplayStatus(c: Challenge): 'active' | 'ended' | 'cancelled' {
   if (c.status === 'cancelled') return 'cancelled';
   const today = new Date().toISOString().slice(0, 10);
-  return today > c.endDate ? 'ended' : 'active';
+  return today > c.endDate! ? 'ended' : 'active';
 }
 export const DEFAULT_COUNTRIES: CountryConfig[] = [
   { name: 'Kenya', flag: '🇰🇪', isActive: true },

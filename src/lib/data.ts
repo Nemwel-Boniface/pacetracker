@@ -301,22 +301,25 @@ function daysBetween(a: string, b: string): number {
   return Math.round((db - da) / 86400000);
 }
 
+// These three assume a distance-goal Challenge (kind !== 'trivia') — every call site guards on
+// kind before reaching here, so the non-null assertions below are safe in practice.
 export async function computeChallengeProgress(challenge: Challenge, memberId: string): Promise<number> {
   const activities = await getMemberActivities(memberId);
-  const types = CHALLENGE_CATEGORY_ACTIVITY_TYPES[challenge.category];
+  const types = CHALLENGE_CATEGORY_ACTIVITY_TYPES[challenge.category!];
   const km = activities
-    .filter(a => types.includes(a.activityType) && a.date >= challenge.startDate && a.date <= challenge.endDate && a.distance != null)
+    .filter(a => types.includes(a.activityType) && a.date >= challenge.startDate! && a.date <= challenge.endDate! && a.distance != null)
     .reduce((sum, a) => sum + (a.distance ?? 0), 0);
   return Math.round(km * 10) / 10;
 }
 
 export function computeChallengePace(challenge: Challenge, progressKm: number): ChallengePace {
-  const periodDays = CHALLENGE_PERIOD_DAYS[challenge.period];
+  const periodDays = CHALLENGE_PERIOD_DAYS[challenge.period!];
   const today = new Date().toISOString().slice(0, 10);
-  const clampedToday = today < challenge.endDate ? today : challenge.endDate;
-  const daysElapsed = Math.min(periodDays, Math.max(1, daysBetween(challenge.startDate, clampedToday) + 1));
-  const expectedKm = Math.round(challenge.goalKm * (daysElapsed / periodDays) * 10) / 10;
-  const percentage = Math.min(100, Math.round((progressKm / challenge.goalKm) * 100));
+  const endDate = challenge.endDate!;
+  const clampedToday = today < endDate ? today : endDate;
+  const daysElapsed = Math.min(periodDays, Math.max(1, daysBetween(challenge.startDate!, clampedToday) + 1));
+  const expectedKm = Math.round(challenge.goalKm! * (daysElapsed / periodDays) * 10) / 10;
+  const percentage = Math.min(100, Math.round((progressKm / challenge.goalKm!) * 100));
   return { percentage, expectedKm, onPace: progressKm >= expectedKm, daysElapsed, daysRemaining: Math.max(0, periodDays - daysElapsed), periodDays };
 }
 
@@ -324,7 +327,7 @@ export async function getChallengeLeaderboard(challenge: Challenge): Promise<Cha
   const participants = (await getChallengeParticipants(challenge.id)).filter(p => p.status === 'accepted');
   const entries = await Promise.all(participants.map(async p => {
     const progressKm = await computeChallengeProgress(challenge, p.memberId);
-    const percentage = Math.min(100, Math.round((progressKm / challenge.goalKm) * 100));
+    const percentage = Math.min(100, Math.round((progressKm / challenge.goalKm!) * 100));
     return { memberId: p.memberId, memberName: p.memberName, progressKm, percentage, rank: 0 };
   }));
   entries.sort((a, b) => b.progressKm - a.progressKm);
