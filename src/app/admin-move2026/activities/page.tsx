@@ -1,6 +1,8 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Member, ActivityLog, ActivityType, CountryConfig, ACTIVITY_LABELS, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getCountryFlag } from '@/types';
+import PeoplePicker, { PersonSelect } from '@/components/PeoplePicker';
+import ChallengeTagPicker from '@/components/ChallengeTagPicker';
 
 type Peer = { id: string; name: string; avatarInitials: string; };
 
@@ -16,52 +18,6 @@ function Avatar({ text, size=32, bg='#7c3aed' }: { text:string; size?:number; bg
   return (
     <div style={{width:size,height:size,borderRadius:'50%',background:bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.38,fontWeight:800,color:'white',flexShrink:0,letterSpacing:'-0.03em'}}>
       {text}
-    </div>
-  );
-}
-
-// ─── TeamMemberSelector ───────────────────────────────────────────────────────
-function TeamMemberSelector({ peers, selected, onChange }: { peers:Peer[]; selected:string[]; onChange:(ids:string[])=>void; }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(()=>{
-    function handler(e:MouseEvent){ if(ref.current&&!ref.current.contains(e.target as Node))setOpen(false); }
-    document.addEventListener('mousedown',handler);
-    return ()=>document.removeEventListener('mousedown',handler);
-  },[]);
-
-  const selectedPeers = peers.filter(p=>selected.includes(p.id));
-  const available = peers.filter(p=>!selected.includes(p.id));
-
-  function toggle(id:string){ onChange(selected.includes(id)?selected.filter(x=>x!==id):[...selected,id]); }
-
-  return (
-    <div ref={ref} style={{position:'relative'}}>
-      <div onClick={()=>setOpen(!open)} style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,padding:'8px 10px',border:'1px solid #e5e7eb',borderRadius:10,background:'white',cursor:'pointer',minHeight:42}}>
-        {selectedPeers.map(p=>(
-          <span key={p.id} style={{display:'inline-flex',alignItems:'center',gap:5,background:'#ede9fe',borderRadius:20,padding:'3px 8px 3px 4px',fontSize:12,fontWeight:700,color:'#6d28d9'}}>
-            <Avatar text={p.avatarInitials} size={18} bg='#7c3aed'/>
-            {p.name.split(' ')[0]}
-            <button type="button" onClick={e=>{e.stopPropagation();toggle(p.id);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'#7c3aed',lineHeight:1,padding:0,marginLeft:2}}>×</button>
-          </span>
-        ))}
-        {selectedPeers.length===0&&<span style={{color:'#9ca3af',fontSize:13}}>Select teammates…</span>}
-        <span style={{marginLeft:'auto',fontSize:11,color:'#9ca3af',flexShrink:0}}>▾</span>
-      </div>
-      {open&&available.length>0&&(
-        <div style={{position:'absolute',top:'100%',left:0,right:0,background:'white',border:'1px solid #e5e7eb',borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:100,maxHeight:200,overflowY:'auto',marginTop:4}}>
-          {available.map(p=>(
-            <div key={p.id} onClick={()=>toggle(p.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',transition:'background 0.1s'}} onMouseEnter={e=>(e.currentTarget.style.background='#faf5ff')} onMouseLeave={e=>(e.currentTarget.style.background='white')}>
-              <Avatar text={p.avatarInitials} size={28} bg='#6d28d9'/>
-              <span style={{fontSize:13,fontWeight:600,color:'#374151'}}>{p.name}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {open&&available.length===0&&selectedPeers.length>0&&(
-        <div style={{position:'absolute',top:'100%',left:0,right:0,background:'white',border:'1px solid #e5e7eb',borderRadius:10,padding:'12px 16px',zIndex:100,marginTop:4,fontSize:12,color:'#6b7280',textAlign:'center'}}>All available teammates added!</div>
-      )}
     </div>
   );
 }
@@ -166,7 +122,7 @@ function AdminEditTeamPanel({ activity, allPeers, onUpdated }: { activity:Activi
         <div style={{fontSize:12,color:'#9ca3af'}}>All members are already in this activity</div>
       ):(
         <>
-          <TeamMemberSelector peers={available} selected={newIds} onChange={setNewIds}/>
+          <PeoplePicker people={available} selected={newIds} onChange={setNewIds} placeholder="Search teammates…" accent="#7c3aed"/>
           {error&&<div style={{color:'#dc2626',fontSize:11,marginTop:6}}>{error}</div>}
           <div style={{display:'flex',gap:8,marginTop:10}}>
             <button type="button" onClick={save} disabled={saving||!newIds.length} style={{padding:'6px 14px',borderRadius:8,background:'#1a7a4a',color:'white',fontWeight:700,fontSize:12,border:'none',cursor:'pointer',opacity:saving||!newIds.length?0.5:1}}>
@@ -191,6 +147,7 @@ export default function ActivitiesPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ memberId:'', activityType:'run' as ActivityType, notes:'', distance:'', duration:'' });
   const [teamMemberIds, setTeamMemberIds] = useState<string[]>([]);
+  const [challengeIds, setChallengeIds] = useState<string[]>([]);
   const [error, setError] = useState('');
 
   useEffect(()=>{
@@ -208,7 +165,7 @@ export default function ActivitiesPage() {
     fetch(`/api/activities?date=${date}`).then(r=>r.json()).then(d=>setActivities(d.activities||[])).catch(()=>setActivities([])).finally(()=>setLoading(false));
   },[date]);
 
-  function setPrimaryMember(id:string){ setForm(f=>({...f,memberId:id})); setTeamMemberIds([]); }
+  function setPrimaryMember(id:string){ setForm(f=>({...f,memberId:id})); setTeamMemberIds([]); setChallengeIds([]); }
 
   async function handleLog(e:React.FormEvent){
     e.preventDefault();
@@ -221,6 +178,7 @@ export default function ActivitiesPage() {
       ...(form.distance?{distance:parseFloat(form.distance)}:{}),
       ...(form.duration?{duration:parseInt(form.duration)}:{}),
       ...(teamMemberIds.length>0?{teamMemberIds}:{}),
+      ...(challengeIds.length>0?{challengeIds}:{}),
     };
     try{
       const res=await fetch('/api/activities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -230,6 +188,7 @@ export default function ActivitiesPage() {
         setActivities(p=>[data.activity,...p]);
         setForm({memberId:'',activityType:'run',notes:'',distance:'',duration:''});
         setTeamMemberIds([]);
+        setChallengeIds([]);
         setShowForm(false);
       }
     }catch{setError('Connection error');}finally{setSaving(false);}
@@ -289,10 +248,7 @@ export default function ActivitiesPage() {
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
               <div>
                 <label style={lbl}>Primary Member *</label>
-                <select value={form.memberId} onChange={e=>setPrimaryMember(e.target.value)} style={inp}>
-                  <option value="">Select member…</option>
-                  {members.map(m=><option key={m.id} value={m.id}>{getCountryFlag(m.country,countries)} {m.name}</option>)}
-                </select>
+                <PersonSelect people={members.map(m=>({id:m.id,name:m.name,avatarInitials:m.avatarInitials,hint:getCountryFlag(m.country,countries)}))} value={form.memberId} onChange={setPrimaryMember} placeholder="Search member by name…"/>
               </div>
               <div>
                 <label style={lbl}>Activity *</label>
@@ -324,8 +280,13 @@ export default function ActivitiesPage() {
                 <label style={lbl}>
                   Who else was with {members.find(m=>m.id===form.memberId)?.name.split(' ')[0]}? (optional)
                 </label>
-                <TeamMemberSelector peers={teamPeers} selected={teamMemberIds} onChange={setTeamMemberIds}/>
+                <PeoplePicker people={teamPeers} selected={teamMemberIds} onChange={setTeamMemberIds} placeholder="Search teammates by name…" accent="#7c3aed"/>
               </div>
+            )}
+
+            {/* Challenge tagging — challenges belong to the primary member; teammates inherit the ones they've joined */}
+            {form.memberId&&(
+              <ChallengeTagPicker key={form.memberId} asAdmin memberId={form.memberId} date={date} activityType={form.activityType} hasDistance={!!parseFloat(form.distance)} selected={challengeIds} onChange={setChallengeIds} label={`Count this toward one of ${members.find(m=>m.id===form.memberId)?.name.split(' ')[0]}'s challenges?`}/>
             )}
 
             {/* Points preview */}
@@ -338,7 +299,7 @@ export default function ActivitiesPage() {
 
             <div style={{display:'flex',gap:10}}>
               <button type="submit" disabled={saving||members.length===0} style={{...btnGreen,opacity:saving||members.length===0?0.6:1}}>{saving?'Logging…':'Log Activity'}</button>
-              <button type="button" onClick={()=>{setShowForm(false);setError('');setTeamMemberIds([]);}} style={btnGray}>Cancel</button>
+              <button type="button" onClick={()=>{setShowForm(false);setError('');setTeamMemberIds([]);setChallengeIds([]);}} style={btnGray}>Cancel</button>
             </div>
           </form>
         </div>
@@ -381,6 +342,7 @@ export default function ActivitiesPage() {
                       🤝 with {withNames}
                     </div>
                   )}
+                  {a.challengeIds?.length?<div style={{fontSize:11,color:'#c2410c',marginTop:2,fontWeight:600}}>🏁 Counts toward {a.challengeIds.length} challenge{a.challengeIds.length!==1?'s':''}</div>:null}
                   <div style={{fontSize:10,color:'#d1d5db',marginTop:2}}>Logged {new Date(a.loggedAt).toLocaleTimeString()}</div>
                   <AdminEditTeamPanel activity={a} allPeers={allPeers} onUpdated={handleActivityUpdated}/>
                 </div>

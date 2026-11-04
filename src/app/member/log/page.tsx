@@ -1,7 +1,9 @@
 'use client';
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
 import { ActivityLog, ActivityType, ACTIVITY_LABELS, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS } from '@/types';
+import PeoplePicker from '@/components/PeoplePicker';
+import ChallengeTagPicker from '@/components/ChallengeTagPicker';
 
 const MAX_PER_DAY = 2;
 const inp = { width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' };
@@ -30,56 +32,6 @@ function Avatar({ name, size = 28, bg = '#1a7a4a' }: { name: string; size?: numb
     <span style={{ width: size, height: size, borderRadius: '50%', background: bg, color: 'white', fontSize: size * 0.38, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '2px solid white' }}>
       {initials(name)}
     </span>
-  );
-}
-
-// ─── TeamMemberSelector (for the log form) ───────────────────────────────────
-function TeamMemberSelector({ peers, selected, onChange, excludeIds = [] }: { peers: Peer[]; selected: string[]; onChange: (ids: string[]) => void; excludeIds?: string[] }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, []);
-  const available = peers.filter(p => !excludeIds.includes(p.id));
-  function toggle(id: string) { onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]); }
-  const selectedPeers = peers.filter(p => selected.includes(p.id));
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      {selectedPeers.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-          {selectedPeers.map(p => (
-            <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#dcfce7', border: '1px solid #86efac', borderRadius: 20, padding: '3px 10px 3px 6px', fontSize: 12, fontWeight: 600, color: '#14532d' }}>
-              <Avatar name={p.name} size={18} />
-              {p.name}
-              <button onClick={() => toggle(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a', fontSize: 14, lineHeight: 1, padding: 0, marginLeft: 2 }}>×</button>
-            </span>
-          ))}
-        </div>
-      )}
-      <button type="button" onClick={() => setOpen(o => !o)} style={{ ...inp, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: selected.length ? '#1f2937' : '#9ca3af' }}>
-        <span>{selected.length ? `${selected.length} teammate${selected.length !== 1 ? 's' : ''} selected` : 'Select teammates…'}</span>
-        <span style={{ fontSize: 10, color: '#9ca3af' }}>{open ? '▲' : '▼'}</span>
-      </button>
-      {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: 220, overflowY: 'auto', marginTop: 4 }}>
-          {available.length === 0 ? (
-            <div style={{ padding: '12px 16px', color: '#9ca3af', fontSize: 13 }}>No other members available</div>
-          ) : available.map(p => {
-            const checked = selected.includes(p.id);
-            return (
-              <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', background: checked ? '#f0fdf4' : 'white', borderBottom: '1px solid #fafafa', transition: 'background 0.1s' }}>
-                <input type="checkbox" checked={checked} onChange={() => toggle(p.id)} style={{ accentColor: '#1a7a4a', width: 15, height: 15 }} />
-                <Avatar name={p.name} size={26} bg={checked ? '#1a7a4a' : '#e5e7eb'} />
-                <span style={{ fontSize: 13, fontWeight: 500, color: '#1f2937' }}>{p.name}</span>
-                {checked && <span style={{ marginLeft: 'auto', fontSize: 12, color: '#16a34a' }}>✓</span>}
-              </label>
-            );
-          })}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -233,7 +185,7 @@ function EditTeamPanel({ activity, peers, onSaved, onCancel }: { activity: Activ
         <div style={{ fontSize: 13, color: '#9ca3af' }}>All active members are already tagged.</div>
       ) : (
         <>
-          <TeamMemberSelector peers={available} selected={addIds} onChange={setAddIds} />
+          <PeoplePicker people={available} selected={addIds} onChange={setAddIds} placeholder="Search teammates…" />
           {addIds.length > 0 && (
             <div style={{ fontSize: 12, color: '#166534', background: '#f0fdf4', borderRadius: 8, padding: '7px 12px', marginTop: 8, fontWeight: 500 }}>
               🤝 {addIds.length} teammate{addIds.length !== 1 ? 's' : ''} will get <strong>{ACTIVITY_POINTS[activity.category] + 1} pts</strong> each
@@ -271,6 +223,8 @@ export default function MemberLogPage() {
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState({ activityType: 'run' as ActivityType, notes: '', distance: '', duration: '', steps: '' });
   const [teamMemberIds, setTeamMemberIds] = useState<string[]>([]);
+  const [challengeIds, setChallengeIds] = useState<string[]>([]);
+  const [logCount, setLogCount] = useState(0);
   const [expandedEditId, setExpandedEditId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -307,6 +261,7 @@ export default function MemberLogPage() {
         ...(form.duration ? { duration: parseInt(form.duration) } : {}),
         ...(form.steps ? { steps: parseInt(form.steps) } : {}),
         ...(teamMemberIds.length > 0 ? { teamMemberIds } : {}),
+        ...(challengeIds.length > 0 ? { challengeIds } : {}),
       };
       const res = await fetch('/api/member/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
@@ -318,10 +273,13 @@ export default function MemberLogPage() {
         const names = activity.teamMembers!.map((m: { name: string }) => m.name.split(' ')[0]).join(', ');
         msg += ` ${names} also got their points! 🤝`;
       }
+      if (activity.challengeIds?.length) msg += ' Counted toward your challenge 🏁';
       toast.success(msg);
       setSuccess(msg);
       setForm({ activityType: 'run', notes: '', distance: '', duration: '', steps: '' });
       setTeamMemberIds([]);
+      setChallengeIds([]);
+      setLogCount(c => c + 1);
       setAllActivities(prev => [activity, ...prev]);
     } catch { setError('Connection error'); } finally { setSaving(false); }
   }
@@ -415,9 +373,10 @@ export default function MemberLogPage() {
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
                   Who was with you? <span style={{ color: '#9ca3af', fontWeight: 400 }}>(tag teammates for a team spirit bonus)</span>
                 </label>
-                <TeamMemberSelector peers={peers} selected={teamMemberIds} onChange={setTeamMemberIds} />
+                <PeoplePicker people={peers} selected={teamMemberIds} onChange={setTeamMemberIds} placeholder="Search teammates by name…" emptyText="No other members available" />
               </div>
             )}
+            <ChallengeTagPicker key={logCount} date={selectedDate} activityType={form.activityType} hasDistance={!!parseFloat(form.distance)} selected={challengeIds} onChange={setChallengeIds} />
             <PointsPreview basePoints={basePoints} teamCount={teamMemberIds.length} />
             {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>{error}</div>}
             {success && <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>{success}</div>}
@@ -458,6 +417,7 @@ export default function MemberLogPage() {
                     {withNames && (
                       <div style={{ fontSize: 12, color: '#059669', marginTop: 3, fontWeight: 500 }}>🤝 with {withNames}</div>
                     )}
+                    {a.challengeIds?.length ? <div style={{ fontSize: 11, color: '#c2410c', marginTop: 3, fontWeight: 600 }}>🏁 Counts toward {a.challengeIds.length} challenge{a.challengeIds.length !== 1 ? 's' : ''}</div> : null}
                     {peers.length > 0 && (
                       <button onClick={() => setExpandedEditId(isEditing ? null : a.id)} style={{ marginTop: 5, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: isEditing ? '#9ca3af' : '#16a34a', fontWeight: 600, padding: 0 }}>
                         {isEditing ? '↑ Close' : '+ Add teammates'}
@@ -505,6 +465,7 @@ export default function MemberLogPage() {
                       <span style={{ background: '#ede9fe', color: '#7c3aed', borderRadius: 20, padding: '1px 7px', fontSize: 10, fontWeight: 700 }}>GROUP</span>
                     </div>
                     {meta && <div style={{ fontSize: 12, color: '#7c3aed', marginBottom: 3, opacity: 0.8 }}>{meta}</div>}
+                    {a.challengeIds?.length ? <div style={{ fontSize: 11, color: '#c2410c', marginBottom: 3, fontWeight: 600 }}>🏁 Counts toward {a.challengeIds.length} of your challenge{a.challengeIds.length !== 1 ? 's' : ''}</div> : null}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       {a.teamActivityOwner && <Avatar name={a.teamActivityOwner.name} size={20} bg="#7c3aed" />}
                       <span style={{ fontSize: 12, color: '#6d28d9', fontWeight: 500 }}>Added by <strong>{ownerFirst}</strong></span>
