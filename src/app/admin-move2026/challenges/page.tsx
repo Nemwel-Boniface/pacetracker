@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Challenge, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS } from '@/types';
 import { TriviaPhase } from '@/lib/trivia';
+import ChallengesHub from '@/components/challenges/ChallengesHub';
 
 interface DistanceRow { challenge: Challenge; kind: 'distance'; displayStatus: 'active' | 'ended' | 'cancelled'; acceptedCount: number; pendingCount: number; }
 interface TriviaRow { challenge: Challenge; kind: 'trivia'; phase: TriviaPhase; isScheduledInFuture: boolean; teamCount: number; visibility: 'public' | 'private'; }
@@ -32,7 +33,7 @@ function DistanceRowView({ challenge: c, displayStatus, acceptedCount, pendingCo
       <div style={{ flex: '1 1 180px', minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: '#1f2937' }}>{c.title}</div>
         <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
-          Owner: {c.ownerName} · {CHALLENGE_CATEGORY_LABELS[c.category!]} · {CHALLENGE_PERIOD_LABELS[c.period!]} · Goal {c.goalKm}km
+          Owner: {c.ownerName} · {CHALLENGE_CATEGORY_LABELS[c.category!]} · {CHALLENGE_PERIOD_LABELS[c.period!]} · Goal {c.goalKm}km · {c.visibility === 'open' ? '🌍 Open' : '🔒 Invite-only'}
         </div>
         <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{fmtDate(c.startDate!)} – {fmtDate(c.endDate!)}</div>
       </div>
@@ -41,6 +42,9 @@ function DistanceRowView({ challenge: c, displayStatus, acceptedCount, pendingCo
         {pendingCount > 0 && <div style={{ color: '#f26522' }}>{pendingCount} pending</div>}
       </div>
       <span style={{ background: s.bg, color: s.color, borderRadius: 20, padding: '3px 11px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{s.label}</span>
+      <Link href={`/admin-move2026/challenges/${c.id}`} style={{ flexShrink: 0, background: '#1a7a4a', color: 'white', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+        View →
+      </Link>
     </div>
   );
 }
@@ -70,6 +74,7 @@ function TriviaRowView({ challenge: c, phase, isScheduledInFuture, teamCount, vi
 export default function AdminChallengesPage() {
   const [rows, setRows] = useState<ChallengeRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'mine' | 'all'>('mine');
 
   useEffect(() => {
     fetch('/api/challenges').then(r => r.json()).then(d => setRows(d.challenges || [])).catch(() => {}).finally(() => setLoading(false));
@@ -84,10 +89,18 @@ export default function AdminChallengesPage() {
           <h1 style={{ fontSize: 26, fontWeight: 900, color: '#1f2937', margin: 0 }}>🏁 Challenges</h1>
           {activeCount > 0 && <span style={{ background: '#1a7a4a', color: 'white', fontSize: 12, fontWeight: 800, padding: '3px 10px', borderRadius: 20 }}>{activeCount} active</span>}
         </div>
-        <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>Member-created distance goals and trivia games — oversight, and manage trivias on a creator&apos;s behalf</p>
+        <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>Create your own challenges, or oversee every member&apos;s distance goals and trivia games</p>
       </div>
 
-      {loading ? (
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        {([['mine', '🎯 My Challenges'], ['all', '👀 All Challenges']] as const).map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key)} style={{ flex: 1, maxWidth: 220, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${tab === key ? '#1a7a4a' : '#e5e7eb'}`, background: tab === key ? '#1a7a4a' : 'white', color: tab === key ? 'white' : '#374151', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{label}</button>
+        ))}
+      </div>
+
+      {tab === 'mine' ? (
+        <ChallengesHub basePath="/admin-move2026/challenges" asAdmin legacyMethaliHref="/admin-move2026/methali-trivia" />
+      ) : loading ? (
         <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>
           <div style={{ width: 28, height: 28, border: '3px solid #1a7a4a', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
           <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
