@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getActivity, updateActivity, logActivity, getMember } from '@/lib/data';
+import { getActivity, updateActivity, logActivity, getMember, challengeTagsForMember } from '@/lib/data';
 import { getAdminSession } from '@/lib/auth';
 import { ActivityLog, ACTIVITY_POINTS, TeamMember } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -43,16 +43,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const owner: TeamMember = { id: activity.memberId, name: activity.memberName };
     const loggedAt = new Date().toISOString();
-    await Promise.all(newPeers.map(peer =>
-      logActivity({
+    await Promise.all(newPeers.map(async peer => {
+      const peerChallengeIds = await challengeTagsForMember(peer.id, activity.challengeIds ?? []);
+      await logActivity({
         id: uuidv4(), memberId: peer.id, memberName: peer.name,
         activityType: activity.activityType, category: activity.category,
         date: activity.date, notes: activity.notes,
         distance: activity.distance, duration: activity.duration,
         points: basePoints + 1, loggedAt,
         isTeamActivity: true, teamActivityId: activity.id, teamActivityOwner: owner,
-      } as ActivityLog)
-    ));
+        ...(peerChallengeIds.length > 0 && { challengeIds: peerChallengeIds }),
+      } as ActivityLog);
+    }));
 
     return NextResponse.json({ activity: updatedActivity });
   } catch { return NextResponse.json({ error: 'Failed to update' }, { status: 500 }); }

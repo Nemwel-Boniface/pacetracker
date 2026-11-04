@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getMemberSession } from '@/lib/auth';
-import { getMember, logActivity, updateActivity } from '@/lib/data';
+import { getMember, logActivity, updateActivity, challengeTagsForMember } from '@/lib/data';
 import { getRedis, KEYS } from '@/lib/redis';
 import { ActivityLog, ACTIVITY_POINTS, TeamMember } from '@/types';
 
@@ -66,8 +66,9 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
     await updateActivity(updatedActivity);
 
     const owner: TeamMember = { id: activity.memberId, name: activity.memberName };
-    await Promise.all(newPeers.map(peer =>
-      logActivity({
+    await Promise.all(newPeers.map(async peer => {
+      const peerChallengeIds = await challengeTagsForMember(peer.id, activity.challengeIds ?? []);
+      await logActivity({
         id: uuidv4(),
         memberId: peer.id,
         memberName: peer.name,
@@ -82,8 +83,9 @@ export async function PATCH(req: NextRequest, { params }: RouteCtx) {
         isTeamActivity: true,
         teamActivityId: activity.id,
         teamActivityOwner: owner,
-      } as ActivityLog)
-    ));
+        ...(peerChallengeIds.length > 0 && { challengeIds: peerChallengeIds }),
+      } as ActivityLog);
+    }));
 
     return NextResponse.json({ activity: updatedActivity, addedCount: newPeers.length, addedNames: newPeers.map(p => p.name) });
   } catch { return NextResponse.json({ error: 'Failed to update activity' }, { status: 500 }); }

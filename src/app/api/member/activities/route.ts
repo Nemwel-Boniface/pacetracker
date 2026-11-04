@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getMemberSession } from '@/lib/auth';
-import { getMember, getMemberActivitiesForDate, logActivity, getMemberActivities, getActivitiesForDate } from '@/lib/data';
+import { getMember, getMemberActivitiesForDate, logActivity, getMemberActivities, getActivitiesForDate, resolveChallengeTags, challengeTagsForMember } from '@/lib/data';
 import { ActivityLog, ActivityType, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, TeamMember } from '@/types';
 
 const MAX_PER_DAY = 2;
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     if (!member.isActive) return NextResponse.json({ error: 'Your account is inactive' }, { status: 403 });
 
-    const { activityType, notes, distance, duration, steps, date, teamMemberIds } = await req.json();
+    const { activityType, notes, distance, duration, steps, date, teamMemberIds, challengeIds } = await req.json();
     if (!activityType) return NextResponse.json({ error: 'activityType required' }, { status: 400 });
 
     const allowed = allowedDates();
@@ -50,6 +50,10 @@ export async function POST(req: NextRequest) {
 
     const category = ACTIVITY_CATEGORY_MAP[activityType as ActivityType] || 'run_session';
     const basePoints = ACTIVITY_POINTS[category];
+    const dist = distance != null && Number(distance) > 0 ? Math.round(Number(distance) * 10) / 10 : undefined;
+
+    const tags = await resolveChallengeTags(member.id, challengeIds, targetDate, activityType, dist);
+    if ('error' in tags) return NextResponse.json({ error: tags.error }, { status: 400 });
 
     // Resolve valid team members (active, not self)
     const rawIds: string[] = Array.isArray(teamMemberIds) ? teamMemberIds : [];
@@ -92,12 +96,13 @@ export async function POST(req: NextRequest) {
       id: activityId, memberId: member.id, memberName: member.name,
       activityType, category, date: targetDate,
       notes: notes?.trim() || undefined,
-      distance: distance != null && Number(distance) > 0 ? Math.round(Number(distance) * 10) / 10 : undefined,
+      distance: dist,
       duration: duration != null && Number(duration) > 0 ? Math.round(Number(duration)) : undefined,
       steps: steps != null && Number(steps) > 0 ? Math.round(Number(steps)) : undefined,
       points,
       loggedAt,
       ...(hasTeam && { teamMembers: teamPeers }),
+      ...(tags.ids.length > 0 && { challengeIds: tags.ids }),
     };
     await logActivity(activity);
 
@@ -113,8 +118,9 @@ export async function POST(req: NextRequest) {
         loggedAt,
       };
       const owner: TeamMember = { id: member.id, name: member.name };
-      await Promise.all(teamPeers.map(peer =>
-        logActivity({
+      await Promise.all(teamPeers.map(async peer => {
+        const peerChallengeIds = await challengeTagsForMember(peer.id, tags.ids);
+        await logActivity({
           ...teamActivity,
           id: uuidv4(),
           memberId: peer.id,
@@ -122,8 +128,9 @@ export async function POST(req: NextRequest) {
           isTeamActivity: true,
           teamActivityId: activityId,
           teamActivityOwner: owner,
-        } as ActivityLog)
-      ));
+          ...(peerChallengeIds.length > 0 && { challengeIds: peerChallengeIds }),
+        } as ActivityLog);
+      }));
     }
 
     return NextResponse.json({ activity, remaining: MAX_PER_DAY - dateActivities.length - 1, date: targetDate }, { status: 201 });
