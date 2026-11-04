@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { getMemberSession } from '@/lib/auth';
-import { getMember, getMemberChallenges, saveChallenge, saveChallengeParticipant, getChallengeParticipant, getChallengeParticipants, computeChallengeProgress, computeChallengePace } from '@/lib/data';
-import { Challenge, ChallengeParticipant, ChallengeCategory, ChallengePeriod, computeChallengeEndDate, getChallengeDisplayStatus } from '@/types';
+import { getActor } from '@/lib/actor';
+import { getMember, getMemberChallenges, saveChallenge, saveChallengeParticipant, getChallengeParticipant, getChallengeParticipants, computeChallengeProgress, computeChallengePace, getOpenChallenges } from '@/lib/data';
+import { Challenge, ChallengeParticipant, ChallengeCategory, ChallengePeriod, ChallengeVisibility, computeChallengeEndDate, getChallengeDisplayStatus } from '@/types';
 import {
   buildTriviaGame, saveTriviaGame, getTriviaGame, isScheduledInFuture,
   MIN_TEAMS, MAX_TEAMS, MIN_TIMER_SECONDS, MAX_TIMER_SECONDS, DEFAULT_TIMER_SECONDS,
@@ -14,7 +14,7 @@ const VALID_PERIODS: ChallengePeriod[] = ['weekly', 'monthly'];
 const VALID_PHASES = new Set<TriviaQuestionPhase>(['test', 'main', 'tiebreak']);
 
 export async function GET() {
-  const session = await getMemberSession();
+  const session = await getActor();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const challenges = await getMemberChallenges(session.memberId);
@@ -54,12 +54,21 @@ export async function GET() {
       else joined.push(entry);
     }
 
-    return NextResponse.json({ owned, joined, invites });
+    // Open challenges anyone can join — excludes ones the caller already belongs to or was invited to.
+    const discover: Record<string, unknown>[] = [];
+    for (const challenge of await getOpenChallenges()) {
+      const participant = await getChallengeParticipant(challenge.id, session.memberId);
+      if (participant && (participant.status === 'accepted' || participant.status === 'pending')) continue;
+      const participants = await getChallengeParticipants(challenge.id);
+      discover.push({ challenge, participantCount: participants.filter(p => p.status === 'accepted').length });
+    }
+
+    return NextResponse.json({ owned, joined, invites, discover });
   } catch { return NextResponse.json({ error: 'Failed to fetch challenges' }, { status: 500 }); }
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getMemberSession();
+  const session = await getActor();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const member = await getMember(session.memberId);
@@ -71,6 +80,7 @@ export async function POST(req: NextRequest) {
     if (body.kind === 'trivia') return createTriviaChallenge(member.id, member.name, body);
 
     const { title, category, period, goalKm } = body;
+    const visibility: ChallengeVisibility = body.visibility === 'invite' ? 'invite' : 'open';
     const trimmedTitle = title?.trim();
     if (!trimmedTitle || trimmedTitle.length > 60) return NextResponse.json({ error: 'Title is required (max 60 characters)' }, { status: 400 });
     if (!VALID_CATEGORIES.includes(category)) return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
@@ -85,6 +95,7 @@ export async function POST(req: NextRequest) {
     const challenge: Challenge = {
       id: uuidv4(), ownerId: member.id, ownerName: member.name, kind: 'distance',
       title: trimmedTitle, category, period, goalKm: Math.round(goal * 10) / 10,
+      visibility, taggedOnly: true,
       startDate, endDate, status: 'active', createdAt: now,
     };
     const ownerParticipant: ChallengeParticipant = {
