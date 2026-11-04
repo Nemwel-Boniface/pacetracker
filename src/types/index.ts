@@ -7,7 +7,7 @@ export interface CountryConfig { name: string; flag: string; isActive: boolean; 
 export type MarathonDistance = '5k' | '10k' | '21k';
 export interface Member { id: string; name: string; email: string; country: Country; isActive: boolean; joinedAt: string; avatarInitials: string; passwordHash?: string; selfRegistered?: boolean; isAdminMember?: boolean; isShadowUser?: boolean; isInvited?: boolean; inviteAccepted?: boolean; marathonRegistered?: boolean; marathonDistance?: MarathonDistance; }
 export interface TeamMember { id: string; name: string; }
-export interface ActivityLog { id: string; memberId: string; memberName: string; activityType: ActivityType; category: ActivityCategory; date: string; notes?: string; points: number; loggedAt: string; distance?: number; duration?: number; steps?: number; teamMembers?: TeamMember[]; teamActivityId?: string; isTeamActivity?: boolean; teamActivityOwner?: TeamMember; }
+export interface ActivityLog { id: string; memberId: string; memberName: string; activityType: ActivityType; category: ActivityCategory; date: string; notes?: string; points: number; loggedAt: string; distance?: number; duration?: number; steps?: number; teamMembers?: TeamMember[]; teamActivityId?: string; isTeamActivity?: boolean; teamActivityOwner?: TeamMember; challengeIds?: string[]; }
 export interface MemberStats { memberId: string; memberName: string; country: Country; totalPoints: number; tier: PointTier; runSessions: number; lunchActivities: number; raceSignups: number; racesCompleted: number; activeDays: number; lastActive?: string; isActive: boolean; }
 export interface PrizeCategory { id: string; name: string; amount: number; description: string; criteria: string; isVisible: boolean; createdAt: string; }
 export interface Winner { id: string; prizeCategoryId: string; prizeCategoryName: string; memberId: string; memberName: string; country: Country; isVisible: boolean; announcedAt: string; }
@@ -49,6 +49,8 @@ export type ChallengeStatus = 'active' | 'cancelled';
 export type ChallengeInviteStatus = 'pending' | 'accepted' | 'declined' | 'left';
 // A Challenge with no `kind` is a legacy record — always treat it as 'distance', never write a backfill.
 export type ChallengeKind = 'distance' | 'trivia';
+// Missing = 'invite' (every challenge created before open challenges existed was invite-only).
+export type ChallengeVisibility = 'open' | 'invite';
 
 export interface Challenge {
   id: string;
@@ -65,6 +67,10 @@ export interface Challenge {
   category?: ChallengeCategory;
   period?: ChallengePeriod;
   goalKm?: number;
+  visibility?: ChallengeVisibility;
+  // True for challenges created after activity tagging shipped: only activities the logger explicitly
+  // tagged with this challenge count. Missing = legacy auto-match (every matching activity in range counts).
+  taggedOnly?: boolean;
   startDate?: string;
   endDate?: string;
   status: ChallengeStatus;
@@ -80,7 +86,8 @@ export interface ChallengeParticipant {
   invitedAt: string;
   respondedAt?: string;
 }
-export interface ChallengeLeaderboardEntry { memberId: string; memberName: string; progressKm: number; percentage: number; rank: number; }
+export interface ChallengeLeaderboardEntry { memberId: string; memberName: string; progressKm: number; percentage: number; rank: number; points: number; activityCount: number; groupActivityCount: number; }
+export interface ChallengeMemberStats { km: number; points: number; activityCount: number; groupActivityCount: number; }
 export interface ChallengePace { percentage: number; expectedKm: number; onPace: boolean; daysElapsed: number; daysRemaining: number; periodDays: number; }
 
 export const CHALLENGE_CATEGORY_ACTIVITY_TYPES: Record<ChallengeCategory, ActivityType[]> = {

@@ -1,5 +1,5 @@
 import { getRedis, KEYS } from './redis';
-import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier, Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengePace, CHALLENGE_CATEGORY_ACTIVITY_TYPES, CHALLENGE_PERIOD_DAYS } from '@/types';
+import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier, Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, ActivityType, getChallengeDisplayStatus, CHALLENGE_CATEGORY_ACTIVITY_TYPES, CHALLENGE_PERIOD_DAYS } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 
@@ -20,7 +20,7 @@ const ADMIN_MEMBER_SEED: Member = {
   isAdminMember: true,
 };
 
-async function ensureAdminMember(): Promise<void> {
+export async function ensureAdminMember(): Promise<void> {
   const r = getRedis();
   const exists = await r.sismember(KEYS.members, ADMIN_MEMBER_ID);
   if (!exists) await saveMember(ADMIN_MEMBER_SEED);
@@ -301,15 +301,27 @@ function daysBetween(a: string, b: string): number {
   return Math.round((db - da) / 86400000);
 }
 
-// These three assume a distance-goal Challenge (kind !== 'trivia') — every call site guards on
+// These assume a distance-goal Challenge (kind !== 'trivia') — every call site guards on
 // kind before reaching here, so the non-null assertions below are safe in practice.
-export async function computeChallengeProgress(challenge: Challenge, memberId: string): Promise<number> {
-  const activities = await getMemberActivities(memberId);
+export function activityCountsForChallenge(challenge: Challenge, a: ActivityLog): boolean {
   const types = CHALLENGE_CATEGORY_ACTIVITY_TYPES[challenge.category!];
-  const km = activities
-    .filter(a => types.includes(a.activityType) && a.date >= challenge.startDate! && a.date <= challenge.endDate! && a.distance != null)
-    .reduce((sum, a) => sum + (a.distance ?? 0), 0);
-  return Math.round(km * 10) / 10;
+  if (!types.includes(a.activityType) || a.date < challenge.startDate! || a.date > challenge.endDate! || !a.distance) return false;
+  return !challenge.taggedOnly || (a.challengeIds ?? []).includes(challenge.id);
+}
+
+export async function computeChallengeStats(challenge: Challenge, memberId: string): Promise<ChallengeMemberStats> {
+  const counted = (await getMemberActivities(memberId)).filter(a => activityCountsForChallenge(challenge, a));
+  const km = counted.reduce((sum, a) => sum + (a.distance ?? 0), 0);
+  return {
+    km: Math.round(km * 10) / 10,
+    points: counted.reduce((sum, a) => sum + a.points, 0),
+    activityCount: counted.length,
+    groupActivityCount: counted.filter(a => a.isTeamActivity || (a.teamMembers?.length ?? 0) > 0).length,
+  };
+}
+
+export async function computeChallengeProgress(challenge: Challenge, memberId: string): Promise<number> {
+  return (await computeChallengeStats(challenge, memberId)).km;
 }
 
 export function computeChallengePace(challenge: Challenge, progressKm: number): ChallengePace {
@@ -326,13 +338,55 @@ export function computeChallengePace(challenge: Challenge, progressKm: number): 
 export async function getChallengeLeaderboard(challenge: Challenge): Promise<ChallengeLeaderboardEntry[]> {
   const participants = (await getChallengeParticipants(challenge.id)).filter(p => p.status === 'accepted');
   const entries = await Promise.all(participants.map(async p => {
-    const progressKm = await computeChallengeProgress(challenge, p.memberId);
+    const { km: progressKm, points, activityCount, groupActivityCount } = await computeChallengeStats(challenge, p.memberId);
     const percentage = Math.min(100, Math.round((progressKm / challenge.goalKm!) * 100));
-    return { memberId: p.memberId, memberName: p.memberName, progressKm, percentage, rank: 0 };
+    return { memberId: p.memberId, memberName: p.memberName, progressKm, percentage, rank: 0, points, activityCount, groupActivityCount };
   }));
-  entries.sort((a, b) => b.progressKm - a.progressKm);
+  // Distance decides the rank — one 15km outing beats three 4km ones. Points only break ties.
+  entries.sort((a, b) => b.progressKm - a.progressKm || b.points - a.points);
   entries.forEach((e, i) => { e.rank = i + 1; });
   return entries;
+}
+
+// Active distance challenges the member has joined that an activity on `date` could be tagged with.
+export async function getLoggableChallenges(memberId: string, date: string): Promise<Challenge[]> {
+  const challenges = await getMemberChallenges(memberId);
+  const eligible = await Promise.all(challenges.map(async c => {
+    if (c.kind === 'trivia' || c.status === 'cancelled' || date < c.startDate! || date > c.endDate!) return null;
+    const p = await getChallengeParticipant(c.id, memberId);
+    return p?.status === 'accepted' ? c : null;
+  }));
+  return eligible.filter(Boolean) as Challenge[];
+}
+
+// Validates the challenges a logger picked for their own activity. Returns an error message for the
+// first problem found so the client can show it, rather than silently dropping a tag.
+export async function resolveChallengeTags(
+  memberId: string, requestedIds: unknown, date: string, activityType: ActivityType, distance: number | undefined,
+): Promise<{ ids: string[] } | { error: string }> {
+  const ids = Array.isArray(requestedIds) ? [...new Set(requestedIds.filter((x): x is string => typeof x === 'string'))] : [];
+  if (ids.length === 0) return { ids: [] };
+  if (!distance) return { error: 'Add a distance (km) to count this activity toward a challenge' };
+  const loggable = new Map((await getLoggableChallenges(memberId, date)).map(c => [c.id, c]));
+  for (const id of ids) {
+    const c = loggable.get(id);
+    if (!c) return { error: 'One of the selected challenges is not active for you on this date' };
+    if (!CHALLENGE_CATEGORY_ACTIVITY_TYPES[c.category!].includes(activityType)) {
+      return { error: `"${c.title}" only counts ${c.category === 'cycling' ? 'cycling' : 'runs, walks and hikes'}` };
+    }
+  }
+  return { ids };
+}
+
+// A teammate's auto-logged copy carries only the logger's challenges the teammate has also joined.
+export async function challengeTagsForMember(memberId: string, ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const accepted = await Promise.all(ids.map(async id => (await getChallengeParticipant(id, memberId))?.status === 'accepted'));
+  return ids.filter((_, i) => accepted[i]);
+}
+
+export async function getOpenChallenges(): Promise<Challenge[]> {
+  return (await getAllChallenges()).filter(c => c.kind !== 'trivia' && c.visibility === 'open' && getChallengeDisplayStatus(c) === 'active');
 }
 
 // Re-export for convenience
