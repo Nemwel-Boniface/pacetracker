@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getMemberSession } from '@/lib/auth';
+import { getActor } from '@/lib/actor';
 import { buildQuestionTemplateWorkbook } from '@/lib/trivia';
 
 export async function GET() {
-  if (!await getMemberSession()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!await getActor()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const buffer = buildQuestionTemplateWorkbook();
   return new NextResponse(new Uint8Array(buffer), {
     headers: {

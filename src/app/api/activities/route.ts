@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { logActivity, deleteActivity, getActivitiesForDate, getMemberActivities, getAllActivities, getMember } from '@/lib/data';
+import { logActivity, deleteActivity, getActivitiesForDate, getMemberActivities, getAllActivities, getMember, resolveChallengeTags, challengeTagsForMember } from '@/lib/data';
 import { getAdminSession } from '@/lib/auth';
-import { ActivityLog, ACTIVITY_POINTS, ACTIVITY_CATEGORY_MAP, TeamMember } from '@/types';
+import { ActivityLog, ActivityType, ACTIVITY_POINTS, ACTIVITY_CATEGORY_MAP, TeamMember } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function GET(req: NextRequest) {
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!await getAdminSession()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    const { memberId, memberName, activityType, date, notes, distance, duration, teamMemberIds } = await req.json();
+    const { memberId, memberName, activityType, date, notes, distance, duration, teamMemberIds, challengeIds } = await req.json();
     if (!memberId || !activityType || !date) return NextResponse.json({ error: 'memberId, activityType, and date required' }, { status: 400 });
 
     const category = ACTIVITY_CATEGORY_MAP[activityType as keyof typeof ACTIVITY_CATEGORY_MAP] || 'run_session';
@@ -41,19 +41,24 @@ export async function POST(req: NextRequest) {
     const dist = distance != null && Number(distance) > 0 ? Math.round(Number(distance) * 10) / 10 : undefined;
     const dur = duration != null && Number(duration) > 0 ? Math.round(Number(duration)) : undefined;
 
+    const tags = await resolveChallengeTags(memberId, challengeIds, date, activityType as ActivityType, dist);
+    if ('error' in tags) return NextResponse.json({ error: tags.error }, { status: 400 });
+
     const activity: ActivityLog = {
       id: activityId, memberId, memberName, activityType, category, date,
       notes: notes?.trim() || undefined,
       distance: dist, duration: dur,
       points, loggedAt,
       ...(hasTeam && { teamMembers: teamPeers }),
+      ...(tags.ids.length > 0 && { challengeIds: tags.ids }),
     };
     await logActivity(activity);
 
     if (hasTeam) {
       const owner: TeamMember = { id: memberId, name: memberName };
-      await Promise.all(teamPeers.map(peer =>
-        logActivity({
+      await Promise.all(teamPeers.map(async peer => {
+        const peerChallengeIds = await challengeTagsForMember(peer.id, tags.ids);
+        await logActivity({
           id: uuidv4(), memberId: peer.id, memberName: peer.name,
           activityType, category, date,
           notes: notes?.trim() || undefined,
@@ -62,8 +67,9 @@ export async function POST(req: NextRequest) {
           isTeamActivity: true,
           teamActivityId: activityId,
           teamActivityOwner: owner,
-        } as ActivityLog)
-      ));
+          ...(peerChallengeIds.length > 0 && { challengeIds: peerChallengeIds }),
+        } as ActivityLog);
+      }));
     }
 
     return NextResponse.json({ activity }, { status: 201 });

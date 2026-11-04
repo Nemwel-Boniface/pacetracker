@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { actorInit } from '@/lib/actorClient';
+import { PersonSelect } from '@/components/PeoplePicker';
 
 type TeamId = string;
 type Phase = 'idle' | 'test' | 'main' | 'tiebreak' | 'finished';
@@ -72,7 +74,7 @@ export default function TriviaControlPanel({ challengeId, viewerIsAdmin }: { cha
 
   useEffect(() => { fetchGame(); }, [fetchGame]);
   useEffect(() => { if (game) { setTimerInput(String(game.timerSeconds)); setSettingsForm({ posterImageUrl: game.posterImageUrl || '', visibility: game.visibility, scheduledAt: game.scheduledAt ? game.scheduledAt.slice(0, 16) : '' }); } }, [game?.timerSeconds, game?.posterImageUrl, game?.visibility, game?.scheduledAt]);
-  useEffect(() => { fetch('/api/member/peers').then(r => r.json()).then(d => setPeers(d.peers || [])).catch(() => {}); }, []);
+  useEffect(() => { fetch('/api/member/peers', actorInit(viewerIsAdmin)).then(r => r.json()).then(d => setPeers(d.peers || [])).catch(() => {}); }, [viewerIsAdmin]);
 
   async function call(url: string, body?: unknown, method: 'POST' | 'DELETE' = 'POST') {
     setBusy(true); setError('');
@@ -220,14 +222,12 @@ export default function TriviaControlPanel({ challengeId, viewerIsAdmin }: { cha
               ))}
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <select
-                value=""
-                onChange={e => { if (e.target.value) { const peer = peers.find(p => p.id === e.target.value); call(`/api/challenges/${challengeId}/trivia/members`, { teamId: team.id, memberId: e.target.value, name: peer?.name }); } }}
-                style={{ flex: 1, minWidth: 120, padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
-              >
-                <option value="">+ Add from members…</option>
-                {peers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <div style={{ flex: 1, minWidth: 120 }}>
+                <PersonSelect
+                  people={peers} value="" placeholder="+ Search members to add…"
+                  onChange={id => { const peer = peers.find(p => p.id === id); call(`/api/challenges/${challengeId}/trivia/members`, { teamId: team.id, memberId: id, name: peer?.name }); }}
+                />
+              </div>
             </div>
             <form onSubmit={e => { e.preventDefault(); const name = (newMemberInput[team.id] || '').trim(); if (!name) return; call(`/api/challenges/${challengeId}/trivia/members`, { teamId: team.id, name }); setNewMemberInput(prev => ({ ...prev, [team.id]: '' })); }} style={{ display: 'flex', gap: 6, marginTop: 6 }}>
               <input value={newMemberInput[team.id] || ''} onChange={e => setNewMemberInput(prev => ({ ...prev, [team.id]: e.target.value }))} placeholder="Or add a guest name…" style={{ flex: 1, minWidth: 0, padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }} />
