@@ -1,19 +1,24 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengePace, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS } from '@/types';
-
-const inp = { width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' };
+import { Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS } from '@/types';
+import { actorInit } from '@/lib/actorClient';
+import PeoplePicker from '@/components/PeoplePicker';
 
 interface Peer { id: string; name: string; avatarInitials: string; }
 interface DetailResponse {
   challenge: Challenge;
   leaderboard: ChallengeLeaderboardEntry[];
-  myParticipant: ChallengeParticipant;
+  myParticipant: ChallengeParticipant | null;
+  myMemberId: string;
   myProgressKm: number;
+  myStats: ChallengeMemberStats;
   pace: ChallengePace;
   isOwner: boolean;
+  canInvite: boolean;
+  canJoin: boolean;
+  canCancel: boolean;
   participants?: ChallengeParticipant[];
   displayStatus: 'active' | 'ended' | 'cancelled';
 }
@@ -32,56 +37,7 @@ function fmtDateLabel(date: string): string {
   return new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-function InvitePicker({ peers, selected, onChange }: { peers: Peer[]; selected: string[]; onChange: (ids: string[]) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, []);
-  function toggle(id: string) { onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]); }
-  const selectedPeers = peers.filter(p => selected.includes(p.id));
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      {selectedPeers.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-          {selectedPeers.map(p => (
-            <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#dcfce7', border: '1px solid #86efac', borderRadius: 20, padding: '3px 10px 3px 6px', fontSize: 12, fontWeight: 600, color: '#14532d' }}>
-              <Avatar name={p.name} size={18} />
-              {p.name}
-              <button onClick={() => toggle(p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a', fontSize: 14, lineHeight: 1, padding: 0, marginLeft: 2 }}>×</button>
-            </span>
-          ))}
-        </div>
-      )}
-      <button type="button" onClick={() => setOpen(o => !o)} style={{ ...inp, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: selected.length ? '#1f2937' : '#9ca3af' }}>
-        <span>{selected.length ? `${selected.length} selected` : 'Select members to invite…'}</span>
-        <span style={{ fontSize: 10, color: '#9ca3af' }}>{open ? '▲' : '▼'}</span>
-      </button>
-      {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: 220, overflowY: 'auto', marginTop: 4 }}>
-          {peers.length === 0 ? (
-            <div style={{ padding: '12px 16px', color: '#9ca3af', fontSize: 13 }}>No eligible members to invite</div>
-          ) : peers.map(p => {
-            const checked = selected.includes(p.id);
-            return (
-              <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', background: checked ? '#f0fdf4' : 'white', borderBottom: '1px solid #fafafa' }}>
-                <input type="checkbox" checked={checked} onChange={() => toggle(p.id)} style={{ accentColor: '#1a7a4a', width: 15, height: 15 }} />
-                <Avatar name={p.name} size={26} bg={checked ? '#1a7a4a' : '#e5e7eb'} />
-                <span style={{ fontSize: 13, fontWeight: 500, color: '#1f2937' }}>{p.name}</span>
-                {checked && <span style={{ marginLeft: 'auto', fontSize: 12, color: '#16a34a' }}>✓</span>}
-              </label>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function DistanceChallengeDetail() {
-  const { id } = useParams<{ id: string }>();
+export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id: string; basePath: string; asAdmin?: boolean }) {
   const router = useRouter();
   const [data, setData] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,7 +48,7 @@ export default function DistanceChallengeDetail() {
   const [busy, setBusy] = useState(false);
 
   function fetchData() {
-    fetch(`/api/member/challenges/${id}`)
+    fetch(`/api/member/challenges/${id}`, actorInit(asAdmin))
       .then(async r => {
         if (!r.ok) { setNotFound(true); return; }
         setData(await r.json());
@@ -103,14 +59,14 @@ export default function DistanceChallengeDetail() {
 
   useEffect(() => { fetchData(); }, [id]);
   useEffect(() => {
-    fetch('/api/member/peers').then(r => r.json()).then(d => setPeers(d.peers || [])).catch(() => {});
-  }, []);
+    fetch('/api/member/peers', actorInit(asAdmin)).then(r => r.json()).then(d => setPeers(d.peers || [])).catch(() => {});
+  }, [asAdmin]);
 
   async function sendInvites() {
     if (inviteIds.length === 0) return;
     setSendingInvites(true);
     try {
-      const res = await fetch(`/api/member/challenges/${id}/invite`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberIds: inviteIds }) });
+      const res = await fetch(`/api/member/challenges/${id}/invite`, actorInit(asAdmin, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberIds: inviteIds }) }));
       const d = await res.json();
       if (!res.ok) { toast.error(d.error || 'Failed to send invites'); return; }
       toast.success(`Invited ${d.invited.length} ${d.invited.length === 1 ? 'person' : 'people'}${d.skipped.length ? ` (${d.skipped.length} skipped)` : ''}`);
@@ -122,7 +78,7 @@ export default function DistanceChallengeDetail() {
   async function respond(action: 'accept' | 'decline') {
     setBusy(true);
     try {
-      const res = await fetch(`/api/member/challenges/${id}/respond`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
+      const res = await fetch(`/api/member/challenges/${id}/respond`, actorInit(asAdmin, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) }));
       const d = await res.json();
       if (!res.ok) { toast.error(d.error || 'Failed to respond'); return; }
       toast.success(action === 'accept' ? 'Joined! 🎯' : 'Invite declined');
@@ -134,11 +90,22 @@ export default function DistanceChallengeDetail() {
     if (!confirm('Leave this challenge? Your progress will stop counting.')) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/member/challenges/${id}/leave`, { method: 'POST' });
+      const res = await fetch(`/api/member/challenges/${id}/leave`, actorInit(asAdmin, { method: 'POST' }));
       const d = await res.json();
       if (!res.ok) { toast.error(d.error || 'Failed to leave'); return; }
       toast.success('You left the challenge');
-      router.push('/member/challenges');
+      router.push(basePath);
+    } catch { toast.error('Connection error'); } finally { setBusy(false); }
+  }
+
+  async function join() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/member/challenges/${id}/join`, actorInit(asAdmin, { method: 'POST' }));
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error || 'Failed to join'); return; }
+      toast.success('Joined! 🎯 Tag your activities to this challenge when you log them');
+      fetchData();
     } catch { toast.error('Connection error'); } finally { setBusy(false); }
   }
 
@@ -146,7 +113,7 @@ export default function DistanceChallengeDetail() {
     if (!confirm('Cancel this challenge for everyone? This cannot be undone.')) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/member/challenges/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/member/challenges/${id}`, actorInit(asAdmin, { method: 'DELETE' }));
       const d = await res.json();
       if (!res.ok) { toast.error(d.error || 'Failed to cancel'); return; }
       toast.success('Challenge cancelled');
@@ -161,11 +128,18 @@ export default function DistanceChallengeDetail() {
   );
   if (notFound || !data) return <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Challenge not found, or you don&apos;t have access to it.</div>;
 
-  const { challenge, leaderboard, myParticipant, myProgressKm, pace, isOwner, participants, displayStatus } = data;
+  const { challenge, leaderboard, myParticipant, myMemberId, myStats, pace, isOwner, canInvite, canJoin, canCancel, participants, displayStatus } = data;
   const invitedIds = new Set((participants || []).filter(p => p.status === 'pending' || p.status === 'accepted').map(p => p.memberId));
-  const invitablePeers = peers.filter(p => !invitedIds.has(p.id));
-  const isPendingSelf = myParticipant.status === 'pending';
-  const myRank = leaderboard.find(e => e.memberId === myParticipant.memberId)?.rank;
+  const invitablePeers = peers.filter(p => !invitedIds.has(p.id) && p.id !== challenge.ownerId);
+  const isPendingSelf = myParticipant?.status === 'pending';
+  const isMember = myParticipant?.status === 'accepted';
+  const myRank = leaderboard.find(e => e.memberId === myMemberId)?.rank;
+  const statPill = (label: string, value: string | number) => (
+    <div style={{ flex: 1, background: 'rgba(255,255,255,0.7)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+      <div style={{ fontSize: 16, fontWeight: 900, color: '#14532d' }}>{value}</div>
+      <div style={{ fontSize: 10, fontWeight: 600, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+    </div>
+  );
 
   return (
     <div>
@@ -174,7 +148,7 @@ export default function DistanceChallengeDetail() {
           <div>
             <h2 style={{ fontSize: 19, fontWeight: 900, color: '#1f2937', margin: '0 0 4px' }}>{challenge.title}</h2>
             <div style={{ fontSize: 12, color: '#6b7280' }}>
-              {CHALLENGE_CATEGORY_LABELS[challenge.category!]} · {CHALLENGE_PERIOD_LABELS[challenge.period!]} · Goal {challenge.goalKm}km
+              {CHALLENGE_CATEGORY_LABELS[challenge.category!]} · {CHALLENGE_PERIOD_LABELS[challenge.period!]} · Goal {challenge.goalKm}km · {challenge.visibility === 'open' ? '🌍 Open' : '🔒 Invite-only'}
             </div>
             <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>
               {fmtDateLabel(challenge.startDate!)} – {fmtDateLabel(challenge.endDate!)} · Created by {challenge.ownerName}
@@ -188,57 +162,77 @@ export default function DistanceChallengeDetail() {
 
       {isPendingSelf ? (
         <div style={{ background: '#faf5ff', border: '1px solid #ddd6fe', borderRadius: 14, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: '#4c1d95', fontWeight: 600, marginBottom: 10 }}>You&apos;ve been invited to this challenge — join in?</div>
+          <div style={{ fontSize: 13, color: '#4c1d95', fontWeight: 600, marginBottom: 10 }}>{myParticipant!.invitedByName} invited you to this challenge — join in?</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => respond('accept')} disabled={busy} style={{ padding: '8px 18px', borderRadius: 8, background: '#1a7a4a', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>✓ Accept</button>
             <button onClick={() => respond('decline')} disabled={busy} style={{ padding: '8px 18px', borderRadius: 8, background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 13, border: '1px solid #e5e7eb', cursor: 'pointer' }}>Decline</button>
           </div>
         </div>
-      ) : (
+      ) : canJoin ? (
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 14, padding: 16, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 200px', fontSize: 13, color: '#9a3412', fontWeight: 600 }}>This challenge is open — join and start tagging your {challenge.category === 'cycling' ? 'rides' : 'runs, walks and hikes'} to it.</div>
+          <button onClick={join} disabled={busy} style={{ padding: '9px 20px', borderRadius: 8, background: '#f26522', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>{busy ? 'Joining…' : '+ Join Challenge'}</button>
+        </div>
+      ) : isMember ? (
         <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 16, padding: 18, marginBottom: 16 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Your Standing{myRank ? ` — Rank #${myRank}` : ''}</div>
           <div style={{ background: 'rgba(255,255,255,0.6)', borderRadius: 20, height: 10, overflow: 'hidden', marginBottom: 8 }}>
             <div style={{ width: `${pace.percentage}%`, height: '100%', background: '#16a34a', borderRadius: 20, transition: 'width 0.3s' }} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ fontSize: 18, fontWeight: 900, color: '#14532d' }}>{myProgressKm}km <span style={{ fontSize: 13, fontWeight: 600, color: '#166534' }}>/ {challenge.goalKm}km — {pace.percentage}%</span></span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            <span style={{ fontSize: 18, fontWeight: 900, color: '#14532d' }}>{myStats.km}km <span style={{ fontSize: 13, fontWeight: 600, color: '#166534' }}>/ {challenge.goalKm}km — {pace.percentage}%</span></span>
             {displayStatus === 'active' && (pace.onPace
               ? <span style={{ fontSize: 12, fontWeight: 700, color: '#166534' }}>✅ On pace</span>
               : <span style={{ fontSize: 12, fontWeight: 700, color: '#9a3412' }}>⏳ Behind pace ({pace.expectedKm}km expected)</span>)}
           </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {statPill('Points', myStats.points)}
+            {statPill('Activities', myStats.activityCount)}
+            {statPill('Group', myStats.groupActivityCount)}
+          </div>
         </div>
-      )}
+      ) : null}
 
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #f3f4f6', overflow: 'hidden', marginBottom: 16 }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #f3f4f6', fontWeight: 700, fontSize: 14, color: '#374151' }}>🏆 Leaderboard</div>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: '#374151' }}>🏆 Challenge Leaderboard</span>
+          <span style={{ fontSize: 11, color: '#9ca3af' }}>Ranked by distance</span>
+        </div>
         {leaderboard.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af', fontSize: 13 }}>🏁 No participants yet</div>
         ) : leaderboard.map(entry => {
-          const isMe = entry.memberId === myParticipant.memberId;
+          const isMe = entry.memberId === myMemberId;
           return (
             <div key={entry.memberId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: '1px solid #fafafa', background: isMe ? '#f0fdf4' : 'white' }}>
-              <span style={{ width: 22, fontWeight: 900, color: entry.rank === 1 ? '#f59e0b' : '#9ca3af', fontSize: 14, flexShrink: 0 }}>{entry.rank === 1 ? '👑' : `#${entry.rank}`}</span>
+              <span style={{ width: 22, fontWeight: 900, color: entry.rank === 1 ? '#f59e0b' : '#9ca3af', fontSize: 14, flexShrink: 0 }}>{entry.rank === 1 && entry.progressKm > 0 ? '👑' : `#${entry.rank}`}</span>
               <Avatar name={entry.memberName} size={32} bg={isMe ? '#1a7a4a' : '#6b7280'} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#1f2937' }}>{entry.memberName}{isMe ? ' (You)' : ''}</div>
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>
+                  {entry.points} pts · {entry.activityCount} activit{entry.activityCount === 1 ? 'y' : 'ies'}{entry.groupActivityCount > 0 ? ` · 🤝 ${entry.groupActivityCount} group` : ''}
+                </div>
                 <div style={{ background: '#f3f4f6', borderRadius: 20, height: 6, overflow: 'hidden', marginTop: 4, maxWidth: 160 }}>
                   <div style={{ width: `${entry.percentage}%`, height: '100%', background: '#1a7a4a', borderRadius: 20 }} />
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontWeight: 900, color: '#1a7a4a', fontSize: 13 }}>{entry.percentage}%</div>
-                <div style={{ fontSize: 10, color: '#9ca3af' }}>{entry.progressKm}km</div>
+                <div style={{ fontWeight: 900, color: '#1a7a4a', fontSize: 15 }}>{entry.progressKm}km</div>
+                <div style={{ fontSize: 10, color: '#9ca3af' }}>{entry.percentage}% of goal</div>
               </div>
             </div>
           );
         })}
       </div>
-      <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 20 }}>Progress only counts activities logged with a distance, within the challenge dates.</div>
+      <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 20 }}>
+        {challenge.taggedOnly
+          ? 'Only activities with a distance, tagged to this challenge when logged, count. Group activities earn everyone +1 point and count for every tagged teammate who has joined.'
+          : 'Progress counts activities logged with a distance, within the challenge dates.'}
+      </div>
 
-      {isOwner && displayStatus === 'active' && (
+      {canInvite && (
         <div style={{ background: 'white', borderRadius: 16, border: '1px solid #f3f4f6', padding: 18, marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#374151', marginBottom: 10 }}>📩 Invite Members</div>
-          <InvitePicker peers={invitablePeers} selected={inviteIds} onChange={setInviteIds} />
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#374151', marginBottom: 10 }}>📩 Invite People</div>
+          <PeoplePicker people={invitablePeers} selected={inviteIds} onChange={setInviteIds} placeholder="Search people to invite…" emptyText="Everyone's already in or invited" />
           <button onClick={sendInvites} disabled={sendingInvites || inviteIds.length === 0} style={{ marginTop: 10, padding: '9px 18px', borderRadius: 8, background: sendingInvites || inviteIds.length === 0 ? '#9ca3af' : '#1a7a4a', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: sendingInvites || inviteIds.length === 0 ? 'not-allowed' : 'pointer' }}>
             {sendingInvites ? 'Sending…' : 'Send Invites'}
           </button>
@@ -257,12 +251,9 @@ export default function DistanceChallengeDetail() {
       )}
 
       {!isPendingSelf && (
-        <div>
-          {isOwner ? (
-            displayStatus !== 'cancelled' && <button onClick={cancelChallenge} disabled={busy} style={{ padding: '9px 18px', borderRadius: 8, background: 'white', color: '#dc2626', fontWeight: 700, fontSize: 13, border: '1px solid #fecaca', cursor: 'pointer' }}>Cancel Challenge</button>
-          ) : (
-            displayStatus === 'active' && myParticipant.status === 'accepted' && <button onClick={leave} disabled={busy} style={{ padding: '9px 18px', borderRadius: 8, background: 'white', color: '#dc2626', fontWeight: 700, fontSize: 13, border: '1px solid #fecaca', cursor: 'pointer' }}>Leave Challenge</button>
-          )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {!isOwner && displayStatus === 'active' && isMember && <button onClick={leave} disabled={busy} style={{ padding: '9px 18px', borderRadius: 8, background: 'white', color: '#dc2626', fontWeight: 700, fontSize: 13, border: '1px solid #fecaca', cursor: 'pointer' }}>Leave Challenge</button>}
+          {canCancel && displayStatus !== 'cancelled' && <button onClick={cancelChallenge} disabled={busy} style={{ padding: '9px 18px', borderRadius: 8, background: 'white', color: '#dc2626', fontWeight: 700, fontSize: 13, border: '1px solid #fecaca', cursor: 'pointer' }}>Cancel Challenge</button>}
         </div>
       )}
     </div>

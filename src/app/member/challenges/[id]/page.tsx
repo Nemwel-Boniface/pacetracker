@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import DistanceChallengeDetail from './DistanceChallengeDetail';
+import DistanceChallengeDetail from '@/components/challenges/DistanceChallengeDetail';
 import TriviaControlPanel from '@/components/TriviaControlPanel';
 
 export default function ChallengeDetailDispatcher() {
@@ -26,5 +26,5 @@ export default function ChallengeDetailDispatcher() {
     </div>
   );
   if (kind === 'trivia') return <TriviaControlPanel challengeId={id} viewerIsAdmin={false} />;
-  return <DistanceChallengeDetail />;
+  return <DistanceChallengeDetail id={id} basePath="/member/challenges" />;
 }
