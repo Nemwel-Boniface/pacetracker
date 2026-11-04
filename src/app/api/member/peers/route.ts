@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getMemberSession } from '@/lib/auth';
+import { getActor } from '@/lib/actor';
 import { getAllMembers } from '@/lib/data';
 
 export async function GET() {
-  const session = await getMemberSession();
+  const session = await getActor();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const members = await getAllMembers();
