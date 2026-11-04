@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getMemberSession } from '@/lib/auth';
+import { getActor } from '@/lib/actor';
 import { getChallenge, getChallengeParticipant, saveChallengeParticipant } from '@/lib/data';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
 export async function POST(_req: NextRequest, { params }: RouteCtx) {
-  const session = await getMemberSession();
+  const session = await getActor();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const { id } = await params;
