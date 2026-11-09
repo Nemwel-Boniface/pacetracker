@@ -3,7 +3,10 @@ import { useState, useRef, useEffect } from 'react';
 import {
   PrizeCategory, Winner,
   ActivityType, ACTIVITY_LABELS, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS,
+  CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_CATEGORY_ACTIVITY_TYPES, ChallengeCategory,
 } from '@/types';
+import { actorInit } from '@/lib/actorClient';
+import { FeaturedChallenge, FeaturedViewer, challengeHref } from '@/components/challenges/FeaturedChallenges';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ChatMsg { id: string; role: 'user' | 'bot'; text: string; }
@@ -15,7 +18,14 @@ interface LogDraft {
   duration?: string;
   steps?: string;
   notes?: string;
+  // Set when the log flow was started from a featured challenge: the activity gets tagged to it.
+  challenge?: { id: string; title: string; category: ChallengeCategory; startDate: string; endDate: string };
 }
+interface PastChallenge {
+  id: string; title: string; startDate: string; endDate: string; goalKm: number; participantCount: number;
+  podium: { rank: number; memberName: string; progressKm: number; percentage: number }[];
+}
+interface Peer { id: string; name: string; }
 type InputMode =
   | 'faqs'
   | 'activity_types'
@@ -23,6 +33,10 @@ type InputMode =
   | 'optional_details'
   | 'preview_actions'
   | 'login_prompt'
+  | 'challenge_list'
+  | 'challenge_actions'
+  | 'challenge_join_confirm'
+  | 'challenge_invite'
   | 'none';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -33,6 +47,8 @@ const FAQS = [
   { id: 'tiers',        label: '🏅 What are the tiers?' },
   { id: 'gifts',        label: '🎁 What gifts are there?' },
   { id: 'winners',      label: '🥇 Any winners yet?' },
+  { id: '__challenges__', label: '🏁 Featured challenges' },
+  { id: '__past__',     label: '🏆 Past challenge winners' },
   { id: '__log__',      label: '📝 Log an activity for me' },
 ];
 
@@ -49,6 +65,44 @@ function fmtDateLabel(date: string) {
     weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
   });
 }
+function fmtShort(date: string) {
+  return new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+function plural(n: number, word: string) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
+function people(n: number) { return `${n} ${n === 1 ? 'person' : 'people'}`; }
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+function challengeTiming(c: FeaturedChallenge) {
+  return c.upcoming ? `starts in ${plural(c.daysUntilStart, 'day')}` : `${plural(c.daysRemaining, 'day')} left`;
+}
+
+// The viewer's own line: where they stand, or how to get in.
+function standingText(c: FeaturedChallenge, viewer: FeaturedViewer | null) {
+  if (!viewer) return '🔐 **Log in** to join and see where you stand.';
+  if (c.me) {
+    if (c.upcoming) return `✅ **You're in!** It kicks off on **${fmtShort(c.startDate)}**. Tag your activities to it from then on.`;
+    const left = c.me.remainingKm > 0 ? `**${c.me.remainingKm} km to go**` : '🏁 **Goal reached!**';
+    const pace = c.me.onPace ? '✅ You\'re on pace' : `⏳ A bit behind pace (${c.me.expectedKm} km expected by now)`;
+    return `📍 **You're #${c.me.rank} of ${c.participantCount}**\n🏃 ${c.me.km} / ${c.goalKm} km (${c.me.percentage}%) · ${left}\n${pace}`;
+  }
+  if (c.invited) return '📩 You\'ve been **invited** to this one. Want to join?';
+  return '🙌 You haven\'t joined yet. Want in?';
+}
+
+function describeChallenge(c: FeaturedChallenge, viewer: FeaturedViewer | null) {
+  return [
+    `⭐ **${c.title}**`,
+    ...(c.description ? [c.description, ''] : []),
+    `🏷️ ${CHALLENGE_CATEGORY_LABELS[c.category]} · ${CHALLENGE_PERIOD_LABELS[c.period]}`,
+    `📆 ${fmtShort(c.startDate)} – ${fmtShort(c.endDate)} (${challengeTiming(c)})`,
+    `🎯 Goal: **${c.goalKm} km** each`,
+    `👥 **${people(c.participantCount)}** joined so far`,
+    `🧑‍💼 Created by ${c.ownerName}`,
+    '',
+    standingText(c, viewer),
+  ].join('\n');
+}
+
 function renderText(text: string) {
   return text.split('\n').map((line, i, arr) => (
     <span key={i}>
@@ -86,6 +140,13 @@ export default function ChatBot() {
   const [winners, setWinners]       = useState<Winner[]>([]);
   const [logDraft, setLogDraft]     = useState<LogDraft>({});
   const [optionals, setOptionals]   = useState({ distance: '', duration: '', steps: '', notes: '' });
+  const [featured, setFeatured]     = useState<FeaturedChallenge[]>([]);
+  const [featViewer, setFeatViewer] = useState<FeaturedViewer | null>(null);
+  const [activeChal, setActiveChal] = useState<FeaturedChallenge | null>(null);
+  const [peers, setPeers]           = useState<Peer[]>([]);
+  const [inviteIds, setInviteIds]   = useState<string[]>([]);
+  const [peerQuery, setPeerQuery]   = useState('');
+  const [loginNext, setLoginNext]   = useState('/member');
   const bottomRef                   = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -154,6 +215,8 @@ export default function ChatBot() {
   async function handleFAQ(faq: { id: string; label: string }) {
     if (thinking) return;
     if (faq.id === '__log__') { startLogFlow(); return; }
+    if (faq.id === '__challenges__') { startChallengesFlow(faq.label); return; }
+    if (faq.id === '__past__') { showPastChallenges(faq.label); return; }
     setInputMode('none');
     setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: faq.label }]);
     setThinking(true);
@@ -163,12 +226,164 @@ export default function ChatBot() {
     setInputMode('faqs');
   }
 
-  // ── Log activity flow ─────────────────────────────────────────────────────
+  // ── Featured challenges flow ──────────────────────────────────────────────
+  function say(text: string) { setMessages(prev => [...prev, { id: `b-${Date.now()}-${Math.random()}`, role: 'bot', text }]); }
+  function echo(text: string) { setMessages(prev => [...prev, { id: `u-${Date.now()}-${Math.random()}`, role: 'user', text }]); }
+  const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-  async function startLogFlow() {
+  // Always refetched, so challenges that ended or were unfeatured since last time drop out on their own.
+  async function loadFeatured(): Promise<{ list: FeaturedChallenge[]; viewer: FeaturedViewer | null } | null> {
+    try {
+      const d = await (await fetch('/api/challenges/featured')).json();
+      const list: FeaturedChallenge[] = d.featured || [];
+      setFeatured(list); setFeatViewer(d.viewer ?? null);
+      return { list, viewer: d.viewer ?? null };
+    } catch { return null; }
+  }
+
+  async function startChallengesFlow(label = '🏁 Featured challenges') {
     if (thinking) return;
     setInputMode('none');
-    setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: '📝 Log an activity for me' }]);
+    echo(label);
+    setThinking(true);
+    const [data] = await Promise.all([loadFeatured(), pause(900)]);
+    setThinking(false);
+    if (!data) { say("Hmm, couldn't load the challenges right now. Please try again! 🦏"); setInputMode('faqs'); return; }
+    if (data.list.length === 0) {
+      say("There are no featured challenges running right now. 🏁\n\nKeep an eye out, new ones pop up here and on the main page! You can also create your own from the **Challenges** tab. 🦏");
+      setInputMode('faqs');
+      return;
+    }
+    const lines = data.list.map(c => `⭐ **${c.title}** (${challengeTiming(c)}, ${people(c.participantCount)} in)`);
+    say(`Here ${data.list.length === 1 ? "is what's" : "are the challenges"} featured right now:\n\n${lines.join('\n')}\n\nTap one to learn more! 👇`);
+    setInputMode('challenge_list');
+  }
+
+  async function selectChallenge(c: FeaturedChallenge) {
+    if (thinking) return;
+    setInputMode('none');
+    echo(c.title);
+    setActiveChal(c);
+    setThinking(true);
+    await pause(800);
+    setThinking(false);
+    say(describeChallenge(c, featViewer));
+    setInputMode('challenge_actions');
+  }
+
+  function askJoin() {
+    if (!activeChal) return;
+    echo('➕ Join this challenge');
+    say(`Join **${activeChal.title}**? 🎯\n\nOnly activities **with a distance** that you tag to this challenge when logging will count${activeChal.upcoming ? `, starting **${fmtShort(activeChal.startDate)}**` : ''}. They still earn your normal points on the main leaderboard too.`);
+    setInputMode('challenge_join_confirm');
+  }
+
+  async function confirmJoin() {
+    if (!activeChal || thinking) return;
+    const target = activeChal;
+    echo('✅ Yes, join');
+    setInputMode('none');
+    setThinking(true);
+    try {
+      const res = await fetch(`/api/member/challenges/${target.id}/join`, actorInit(featViewer?.isAdmin, { method: 'POST' }));
+      const d = await res.json();
+      if (!res.ok) {
+        setThinking(false);
+        say(`Oops! **${d.error || 'Could not join'}** 🦏`);
+        setInputMode('challenge_actions');
+        return;
+      }
+      const data = await loadFeatured();
+      setThinking(false);
+      const updated = data?.list.find(x => x.id === target.id) ?? target;
+      setActiveChal(updated);
+      say(`You're in! 🎉 Welcome to **${updated.title}**.\n\n${standingText(updated, data?.viewer ?? featViewer)}\n\n💡 When you log a ${updated.category === 'cycling' ? 'ride' : 'run, walk or hike'}, add the distance and pick this challenge so it counts.`);
+      setInputMode('challenge_actions');
+    } catch {
+      setThinking(false);
+      say("Hmm, couldn't connect right now. Please try again! 🦏");
+      setInputMode('challenge_actions');
+    }
+  }
+
+  async function startInvite() {
+    if (!activeChal || thinking) return;
+    echo('📩 Invite people');
+    setInputMode('none');
+    setThinking(true);
+    try {
+      const d = await (await fetch('/api/member/peers', actorInit(featViewer?.isAdmin))).json();
+      setPeers(d.peers || []);
+    } catch { setPeers([]); }
+    setThinking(false);
+    setInviteIds([]); setPeerQuery('');
+    say(`Who would you like to invite to **${activeChal.title}**? Search below and pick as many as you like. They'll get an invite they can accept from their Challenges page. 📩`);
+    setInputMode('challenge_invite');
+  }
+
+  async function sendChallengeInvites() {
+    if (!activeChal || inviteIds.length === 0 || thinking) return;
+    const names = inviteIds.map(id => peers.find(p => p.id === id)?.name).filter(Boolean);
+    echo(`Invite ${names.join(', ')}`);
+    setInputMode('none');
+    setThinking(true);
+    try {
+      const res = await fetch(`/api/member/challenges/${activeChal.id}/invite`, actorInit(featViewer?.isAdmin, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberIds: inviteIds }) }));
+      const d = await res.json();
+      setThinking(false);
+      if (!res.ok) { say(`Oops! **${d.error || 'Could not send invites'}** 🦏`); setInputMode('challenge_actions'); return; }
+      const skipped = (d.skipped as { memberId: string; reason: string }[]).map(x => `${peers.find(p => p.id === x.memberId)?.name ?? 'Someone'} (${x.reason})`);
+      say(`📩 Sent **${plural(d.invited.length, 'invite')}**!${skipped.length ? `\n\nSkipped: ${skipped.join(', ')}.` : ''}`);
+      setInviteIds([]);
+      setInputMode('challenge_actions');
+    } catch {
+      setThinking(false);
+      say("Hmm, couldn't connect right now. Please try again! 🦏");
+      setInputMode('challenge_actions');
+    }
+  }
+
+  function challengeLogin() {
+    if (!activeChal) return;
+    setLoginNext(`/member/challenges/${activeChal.id}`);
+    echo('🔐 Log in to join');
+    say(`Log in (or create an account, it takes a minute) and I'll take you straight to **${activeChal.title}** so you can join. 🦏`);
+    setInputMode('login_prompt');
+  }
+
+  async function showPastChallenges(label = '🏆 Past challenge winners') {
+    if (thinking) return;
+    setInputMode('none');
+    echo(label);
+    setThinking(true);
+    let past: PastChallenge[] | null = null;
+    try {
+      const [res] = await Promise.all([fetch('/api/challenges/featured?past=1'), pause(900)]);
+      past = (await res.json()).past || [];
+    } catch { past = null; }
+    setThinking(false);
+    if (!past) { say("Hmm, couldn't load past challenges right now. Please try again! 🦏"); setInputMode('faqs'); return; }
+    if (past.length === 0) {
+      say("No featured challenge has finished yet, so no champions to crown... **yet**! 👑\n\nTap **🏁 Featured challenges** to jump into one that's running. 🦏");
+      setInputMode('faqs');
+      return;
+    }
+    const blocks = past.slice(0, 5).map(c => {
+      const podium = c.podium.length
+        ? c.podium.map((e, i) => `${MEDALS[i]} **${e.memberName}** · ${e.progressKm} km`).join('\n')
+        : 'No distance logged, so no winner.';
+      return `🏁 **${c.title}**\n${fmtShort(c.startDate)} – ${fmtShort(c.endDate)} · 🎯 ${c.goalKm} km · 👥 ${c.participantCount}\n${podium}`;
+    });
+    say(`Here's the hall of fame! 🏆\n\n${blocks.join('\n\n')}\n\nCongrats to all the finishers! 🎉🦏`);
+    setInputMode('faqs');
+  }
+
+  // ── Log activity flow ─────────────────────────────────────────────────────
+
+  async function startLogFlow(challenge?: LogDraft['challenge']) {
+    if (thinking) return;
+    setInputMode('none');
+    setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: challenge ? `📝 Log an activity for ${challenge.title}` : '📝 Log an activity for me' }]);
     setThinking(true);
 
     const res = await fetch('/api/auth/member/me');
@@ -180,17 +395,20 @@ export default function ChatBot() {
         id: `b-${Date.now()}`, role: 'bot',
         text: "You need to be **logged in** to log an activity! 🔐\n\nHead over to the login page, sign in, and come back — I'll be right here waiting to help you log! 🦏",
       }]);
+      setLoginNext('/member');
       setInputMode('login_prompt');
       return;
     }
 
     const firstName = data.member.name.split(' ')[0];
-    setLogDraft({});
+    setLogDraft(challenge ? { challenge } : {});
     setOptionals({ distance: '', duration: '', steps: '', notes: '' });
 
     setMessages(prev => [...prev, {
       id: `b-${Date.now()}`, role: 'bot',
-      text: `Let's do it, **${firstName}**! 💪\n\nWhat type of activity did you do?`,
+      text: challenge
+        ? `Let's do it, **${firstName}**! 💪 This one counts toward **${challenge.title}**.\n\nWhat did you do?`
+        : `Let's do it, **${firstName}**! 💪\n\nWhat type of activity did you do?`,
     }]);
     setInputMode('activity_types');
   }
@@ -230,6 +448,10 @@ export default function ChatBot() {
 
   function handleOptionalDetails() {
     const dist  = optionals.distance.trim();
+    if (logDraft.challenge && !(parseFloat(dist) > 0)) {
+      say(`Add a **distance (km)** so it counts toward **${logDraft.challenge.title}**! 📏`);
+      return;
+    }
     const dur   = optionals.duration.trim();
     const stps  = optionals.steps.trim();
     const notes = optionals.notes.trim();
@@ -265,6 +487,7 @@ export default function ChatBot() {
       if (dur)   details.push(`⏱️ **${dur} min**`);
       if (stps)  details.push(`👣 **${parseInt(stps).toLocaleString()} steps**`);
       if (notes) details.push(`📝 "${notes}"`);
+      if (logDraft.challenge) details.push(`🏁 **Challenge:** ${logDraft.challenge.title}`);
 
       const preview = [
         'Here\'s what I\'m about to log for you:\n',
@@ -296,6 +519,7 @@ export default function ChatBot() {
           ...(logDraft.duration && { duration: parseInt(logDraft.duration) }),
           ...(logDraft.steps    && { steps: parseInt(logDraft.steps) }),
           ...(logDraft.notes    && { notes: logDraft.notes }),
+          ...(logDraft.challenge && { challengeIds: [logDraft.challenge.id] }),
         }),
       });
       const data = await res.json();
@@ -313,7 +537,7 @@ export default function ChatBot() {
       const pts = data.activity.points;
       setMessages(prev => [...prev, {
         id: `b-${Date.now()}`, role: 'bot',
-        text: `Done! 🎉 **+${pts} point${pts !== 1 ? 's' : ''}** added to your total!\n\n${ACTIVITY_LABELS[logDraft.activityType!]} logged for ${logDraft.dateLabel}. It's showing up in your activity log right now! 🦏\n\nAnything else I can help with?`,
+        text: `Done! 🎉 **+${pts} point${pts !== 1 ? 's' : ''}** added to your total!\n\n${ACTIVITY_LABELS[logDraft.activityType!]} logged for ${logDraft.dateLabel}. It's showing up in your activity log right now! 🦏${logDraft.challenge ? `\n\n🏁 **${logDraft.distance} km** counted toward **${logDraft.challenge.title}**. Tap **🏁 Featured challenges** to see your new position!` : ''}\n\nAnything else I can help with?`,
       }]);
       setLogDraft({});
       setOptionals({ distance: '', duration: '', steps: '', notes: '' });
@@ -329,7 +553,7 @@ export default function ChatBot() {
   }
 
   function restartLogFlow() {
-    setLogDraft({});
+    setLogDraft(d => (d.challenge ? { challenge: d.challenge } : {}));
     setOptionals({ distance: '', duration: '', steps: '', notes: '' });
     setMessages(prev => [...prev, {
       id: `b-${Date.now()}`, role: 'bot',
@@ -344,7 +568,13 @@ export default function ChatBot() {
     { date: today,                label: 'Today',       sub: fmtDateLabel(today) },
     { date: shiftDays(today, -1), label: 'Yesterday',   sub: fmtDateLabel(shiftDays(today, -1)) },
     { date: shiftDays(today, -2), label: '2 days ago',  sub: fmtDateLabel(shiftDays(today, -2)) },
-  ];
+  ].filter(o => !logDraft.challenge || (o.date >= logDraft.challenge.startDate && o.date <= logDraft.challenge.endDate));
+  const activityChoices = logDraft.challenge
+    ? ACTIVITY_TYPES.filter(([type]) => CHALLENGE_CATEGORY_ACTIVITY_TYPES[logDraft.challenge!.category].includes(type))
+    : ACTIVITY_TYPES;
+  const peerResults = peers
+    .filter(p => !inviteIds.includes(p.id) && (!peerQuery.trim() || p.name.toLowerCase().includes(peerQuery.trim().toLowerCase())))
+    .slice(0, 30);
 
   // ── Hover helpers (inline style mutation) ────────────────────────────────
   function hoverGreen(e: React.MouseEvent<HTMLButtonElement>) {
@@ -505,7 +735,7 @@ export default function ChatBot() {
                 <div style={{ padding: '10px 13px 13px' }}>
                   <div style={{ fontSize: 10, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 7 }}>Pick your activity</div>
                   <div style={{ maxHeight: 190, overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                    {ACTIVITY_TYPES.map(([type, label]) => (
+                    {activityChoices.map(([type, label]) => (
                       <button
                         key={type}
                         onClick={() => handleActivityType(type)}
@@ -552,10 +782,10 @@ export default function ChatBot() {
               {/* Optional details */}
               {inputMode === 'optional_details' && (
                 <div style={{ padding: '10px 13px 13px' }}>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>Extra details — all optional</div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>{logDraft.challenge ? 'Distance is required for the challenge' : 'Extra details — all optional'}</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 4 }}>Distance (km)</label>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 4 }}>Distance (km){logDraft.challenge ? ' *' : ''}</label>
                       <input
                         type="number" min="0" step="0.1" placeholder="e.g. 5.2"
                         value={optionals.distance}
@@ -631,11 +861,92 @@ export default function ChatBot() {
                 </div>
               )}
 
+              {/* Featured challenge picker */}
+              {inputMode === 'challenge_list' && (
+                <div style={{ padding: '10px 13px 13px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 7 }}>Pick a challenge</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 190, overflowY: 'auto' }}>
+                    {featured.map(c => (
+                      <button key={c.id} onClick={() => selectChallenge(c)} style={{ ...btnPill(), borderRadius: 12, textAlign: 'left', whiteSpace: 'normal', padding: '8px 12px' }} onMouseOver={hoverGreen} onMouseOut={e => hoverReset(e)}>
+                        ⭐ {c.title}{c.joined ? ' · ✅ joined' : ''}
+                      </button>
+                    ))}
+                    <button onClick={() => setInputMode('faqs')} style={{ ...btnPill(), borderRadius: 12, color: '#6b7280' }}>Back to questions</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions for the selected challenge */}
+              {inputMode === 'challenge_actions' && activeChal && (
+                <div style={{ padding: '10px 13px 13px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {!featViewer && (
+                    <button onClick={challengeLogin} style={{ padding: '11px', borderRadius: 10, background: 'linear-gradient(135deg,#f26522,#e0551a)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>🔐 Log in to join</button>
+                  )}
+                  {activeChal.canJoin && (
+                    <button onClick={askJoin} style={{ padding: '11px', borderRadius: 10, background: 'linear-gradient(135deg,#f26522,#e0551a)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>{activeChal.invited ? '✓ Accept invite & join' : '➕ Join this challenge'}</button>
+                  )}
+                  {activeChal.joined && !activeChal.upcoming && !featViewer?.isAdmin && (
+                    <button
+                      onClick={() => startLogFlow({ id: activeChal.id, title: activeChal.title, category: activeChal.category, startDate: activeChal.startDate, endDate: activeChal.endDate })}
+                      style={{ padding: '11px', borderRadius: 10, background: 'linear-gradient(135deg,#1a7a4a,#145c38)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}
+                    >📝 Log an activity for this challenge</button>
+                  )}
+                  {activeChal.canInvite && (
+                    <button onClick={startInvite} style={{ padding: '9px', borderRadius: 10, background: 'white', color: '#145c38', fontWeight: 700, fontSize: 13, border: '1.5px solid #1a7a4a', cursor: 'pointer' }}>📩 Invite people</button>
+                  )}
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {featViewer && <a href={challengeHref(activeChal.id, featViewer)} style={{ flex: 1, padding: '8px', borderRadius: 10, background: 'white', color: '#374151', fontWeight: 600, fontSize: 12, border: '1.5px solid #e5e7eb', textAlign: 'center', textDecoration: 'none' }}>🔗 Open page</a>}
+                    {featured.length > 1 && <button onClick={() => setInputMode('challenge_list')} style={{ flex: 1, padding: '8px', borderRadius: 10, background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 12, border: '1.5px solid #e5e7eb', cursor: 'pointer' }}>← Other challenges</button>}
+                    <button onClick={() => setInputMode('faqs')} style={{ flex: 1, padding: '8px', borderRadius: 10, background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 12, border: '1.5px solid #e5e7eb', cursor: 'pointer' }}>Questions</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Join confirmation */}
+              {inputMode === 'challenge_join_confirm' && (
+                <div style={{ padding: '10px 13px 13px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  <button onClick={confirmJoin} style={{ padding: '11px', borderRadius: 10, background: 'linear-gradient(135deg,#1a7a4a,#145c38)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' }}>✅ Yes, join</button>
+                  <button onClick={() => { echo('Not now'); setInputMode('challenge_actions'); }} style={{ padding: '9px', borderRadius: 10, background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 13, border: '1.5px solid #e5e7eb', cursor: 'pointer' }}>Not now</button>
+                </div>
+              )}
+
+              {/* Invite people (owner / admin only) */}
+              {inputMode === 'challenge_invite' && (
+                <div style={{ padding: '10px 13px 13px' }}>
+                  {inviteIds.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 7 }}>
+                      {inviteIds.map(id => (
+                        <span key={id} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#14532d', borderRadius: 20, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
+                          {peers.find(p => p.id === id)?.name}
+                          <button onClick={() => setInviteIds(ids => ids.filter(x => x !== id))} style={{ background: 'none', border: 'none', color: '#1a7a4a', cursor: 'pointer', fontWeight: 900, marginLeft: 3, padding: 0 }}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <input value={peerQuery} onChange={e => setPeerQuery(e.target.value)} placeholder="Search people…" style={{ ...inp, marginBottom: 6 }} />
+                  <div style={{ maxHeight: 120, overflowY: 'auto', border: '1px solid #f3f4f6', borderRadius: 8, marginBottom: 8 }}>
+                    {peerResults.length === 0
+                      ? <div style={{ padding: 10, fontSize: 12, color: '#9ca3af' }}>No matches</div>
+                      : peerResults.map(p => (
+                        <button key={p.id} onClick={() => { setInviteIds(ids => [...ids, p.id]); setPeerQuery(''); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', fontSize: 12, background: 'white', border: 'none', borderBottom: '1px solid #fafafa', cursor: 'pointer', color: '#374151' }}>
+                          + {p.name}
+                        </button>
+                      ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={sendChallengeInvites} disabled={inviteIds.length === 0} style={{ flex: 2, padding: '10px', borderRadius: 10, background: inviteIds.length === 0 ? '#9ca3af' : 'linear-gradient(135deg,#1a7a4a,#145c38)', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: inviteIds.length === 0 ? 'not-allowed' : 'pointer' }}>
+                      📩 Send {inviteIds.length > 0 ? plural(inviteIds.length, 'invite') : 'invites'}
+                    </button>
+                    <button onClick={() => setInputMode('challenge_actions')} style={{ flex: 1, padding: '10px', borderRadius: 10, background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 12, border: '1.5px solid #e5e7eb', cursor: 'pointer' }}>Cancel</button>
+                  </div>
+                </div>
+              )}
+
               {/* Login prompt */}
               {inputMode === 'login_prompt' && (
                 <div style={{ padding: '10px 13px 13px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <a
-                    href="/authenticate"
+                    href={loginNext === '/member' ? '/authenticate' : `/authenticate?next=${encodeURIComponent(loginNext)}`}
                     style={{
                       display: 'block', padding: '11px', borderRadius: 10, textAlign: 'center',
                       background: 'linear-gradient(135deg,#1a7a4a,#145c38)',
