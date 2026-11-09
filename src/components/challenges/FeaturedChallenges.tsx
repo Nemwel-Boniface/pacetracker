@@ -7,7 +7,7 @@ import { actorInit } from '@/lib/actorClient';
 
 export interface FeaturedChallenge {
   id: string; title: string; description: string; category: ChallengeCategory; period: ChallengePeriod;
-  goalKm: number; startDate: string; endDate: string; ownerName: string;
+  goalKm: number; startDate: string; endDate: string; ownerName: string; coFacilitators: string[];
   participantCount: number; upcoming: boolean; daysUntilStart: number; daysRemaining: number;
   joined: boolean; invited: boolean; canJoin: boolean; canInvite: boolean;
   me: { km: number; percentage: number; remainingKm: number; onPace: boolean; expectedKm: number; rank: number } | null;
@@ -18,6 +18,12 @@ function fmtDate(date: string): string {
   return new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 function plural(n: number, word: string): string { return `${n} ${word}${n === 1 ? '' : 's'}`; }
+
+// "Jane", "Jane & John", "Jane, John & Amy" — the creator first.
+export function featuredFacilitators(c: FeaturedChallenge): string {
+  const names = [c.ownerName, ...(c.coFacilitators ?? [])];
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
+}
 
 // Where a signed-in viewer manages the challenge; logged-out visitors go through login and land there.
 export function challengeHref(id: string, viewer: FeaturedViewer | null): string {
@@ -56,7 +62,7 @@ export default function FeaturedChallenges() {
             <div style={{ minWidth: 0, flex: '1 1 200px' }}>
               <div style={{ fontWeight: 900, fontSize: 17, color: '#1f2937' }}>{c.title}</div>
               <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
-                {CHALLENGE_CATEGORY_LABELS[c.category]} · {CHALLENGE_PERIOD_LABELS[c.period]} · by {c.ownerName}
+                {CHALLENGE_CATEGORY_LABELS[c.category]} · {CHALLENGE_PERIOD_LABELS[c.period]} · by {featuredFacilitators(c)}
               </div>
             </div>
             <span style={{ background: c.upcoming ? '#e0e7ff' : '#fef3c7', color: c.upcoming ? '#3730a3' : '#92400e', borderRadius: 20, padding: '3px 11px', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
@@ -73,6 +79,10 @@ export default function FeaturedChallenges() {
                 <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 2 }}>{label}</div>
               </div>
             ))}
+          </div>
+
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+            💬 Questions? Reach out to {c.coFacilitators?.length ? 'the facilitators' : 'the creator'}: <strong style={{ color: '#334155' }}>{featuredFacilitators(c)}</strong>
           </div>
 
           {c.me && (

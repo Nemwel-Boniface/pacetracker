@@ -6,7 +6,7 @@ import {
   CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_CATEGORY_ACTIVITY_TYPES, ChallengeCategory,
 } from '@/types';
 import { actorInit } from '@/lib/actorClient';
-import { FeaturedChallenge, FeaturedViewer, challengeHref } from '@/components/challenges/FeaturedChallenges';
+import { FeaturedChallenge, FeaturedViewer, challengeHref, featuredFacilitators } from '@/components/challenges/FeaturedChallenges';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ChatMsg { id: string; role: 'user' | 'bot'; text: string; }
@@ -97,7 +97,8 @@ function describeChallenge(c: FeaturedChallenge, viewer: FeaturedViewer | null) 
     `📆 ${fmtShort(c.startDate)} – ${fmtShort(c.endDate)} (${challengeTiming(c)})`,
     `🎯 Goal: **${c.goalKm} km** each`,
     `👥 **${people(c.participantCount)}** joined so far`,
-    `🧑‍💼 Created by ${c.ownerName}`,
+    c.coFacilitators?.length ? `🤝 Facilitated by **${featuredFacilitators(c)}**` : `🧑‍💼 Created by **${c.ownerName}**`,
+    `💬 Questions? Reach out to ${c.coFacilitators?.length ? 'any of them' : 'them'}.`,
     '',
     standingText(c, viewer),
   ].join('\n');
