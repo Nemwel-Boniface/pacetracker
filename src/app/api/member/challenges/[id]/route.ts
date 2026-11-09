@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getActor } from '@/lib/actor';
 import { getChallenge, getChallengeParticipant, getChallengeParticipants, getChallengeLeaderboard, computeChallengeStats, computeChallengePace, saveChallenge } from '@/lib/data';
-import { getChallengeDisplayStatus } from '@/types';
+import { getChallengeDisplayStatus, isChallengeUpcoming } from '@/types';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -35,6 +35,8 @@ export async function GET(_req: NextRequest, { params }: RouteCtx) {
     return NextResponse.json({
       challenge, leaderboard, myParticipant, myMemberId: session.memberId, myProgressKm: myStats.km, myStats, pace,
       isOwner, canInvite, canJoin, canCancel: isOwner || session.isAdmin, participants, displayStatus,
+      upcoming: isChallengeUpcoming(challenge), isAdmin: session.isAdmin,
+      canRequestFeature: isOwner && !session.isAdmin && displayStatus === 'active' && challenge.featureStatus !== 'featured' && challenge.featureStatus !== 'requested',
     });
   } catch { return NextResponse.json({ error: 'Failed to fetch challenge' }, { status: 500 }); }
 }
