@@ -51,6 +51,9 @@ export type ChallengeInviteStatus = 'pending' | 'accepted' | 'declined' | 'left'
 export type ChallengeKind = 'distance' | 'trivia';
 // Missing = 'invite' (every challenge created before open challenges existed was invite-only).
 export type ChallengeVisibility = 'open' | 'invite';
+// Main-page featuring. Missing = never requested. Members can only request; an admin features or declines.
+// Stays 'featured' after the challenge ends so it shows up in the public past-challenges history.
+export type ChallengeFeatureStatus = 'requested' | 'featured' | 'declined';
 
 export interface Challenge {
   id: string;
@@ -71,6 +74,11 @@ export interface Challenge {
   // True for challenges created after activity tagging shipped: only activities the logger explicitly
   // tagged with this challenge count. Missing = legacy auto-match (every matching activity in range counts).
   taggedOnly?: boolean;
+  // Shown on the main page card and in the chatbot. Required before a challenge can be featured.
+  description?: string;
+  featureStatus?: ChallengeFeatureStatus;
+  featuredAt?: string;
+  // Can be a future date: people can join early, but only activities from startDate on count.
   startDate?: string;
   endDate?: string;
   status: ChallengeStatus;
@@ -112,6 +120,20 @@ export function getChallengeDisplayStatus(c: Challenge): 'active' | 'ended' | 'c
   const today = new Date().toISOString().slice(0, 10);
   return today > c.endDate! ? 'ended' : 'active';
 }
+// An active challenge whose start date is still in the future. Joinable, but nothing can be tagged to it yet.
+export function isChallengeUpcoming(c: Challenge): boolean {
+  return getChallengeDisplayStatus(c) === 'active' && new Date().toISOString().slice(0, 10) < c.startDate!;
+}
+export const CHALLENGE_DESCRIPTION_MAX = 500;
+export const DEFAULT_MAX_FEATURED_CHALLENGES = 3;
+
+export interface AppSettings {
+  marathonBannerEnabled: boolean;
+  marathonCountries: string[]; // empty = all countries; specific names = only those
+  // Soft cap on live featured challenges. Admins can still override it per challenge.
+  maxFeaturedChallenges: number;
+}
+export const DEFAULT_APP_SETTINGS: AppSettings = { marathonBannerEnabled: true, marathonCountries: [], maxFeaturedChallenges: DEFAULT_MAX_FEATURED_CHALLENGES };
 export const DEFAULT_COUNTRIES: CountryConfig[] = [
   { name: 'Kenya', flag: '🇰🇪', isActive: true },
   { name: 'Rwanda', flag: '🇷🇼', isActive: true },

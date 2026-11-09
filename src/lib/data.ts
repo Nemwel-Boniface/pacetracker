@@ -1,5 +1,5 @@
 import { getRedis, KEYS } from './redis';
-import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier, Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, ActivityType, getChallengeDisplayStatus, CHALLENGE_CATEGORY_ACTIVITY_TYPES, CHALLENGE_PERIOD_DAYS } from '@/types';
+import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier, Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, ActivityType, getChallengeDisplayStatus, CHALLENGE_CATEGORY_ACTIVITY_TYPES, CHALLENGE_PERIOD_DAYS, AppSettings, DEFAULT_APP_SETTINGS } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 
@@ -327,6 +327,9 @@ export async function computeChallengeProgress(challenge: Challenge, memberId: s
 export function computeChallengePace(challenge: Challenge, progressKm: number): ChallengePace {
   const periodDays = CHALLENGE_PERIOD_DAYS[challenge.period!];
   const today = new Date().toISOString().slice(0, 10);
+  const percentageSoFar = Math.min(100, Math.round((progressKm / challenge.goalKm!) * 100));
+  // Not started yet — nobody can be behind a pace that hasn't begun.
+  if (today < challenge.startDate!) return { percentage: percentageSoFar, expectedKm: 0, onPace: true, daysElapsed: 0, daysRemaining: periodDays, periodDays };
   const endDate = challenge.endDate!;
   const clampedToday = today < endDate ? today : endDate;
   const daysElapsed = Math.min(periodDays, Math.max(1, daysBetween(challenge.startDate!, clampedToday) + 1));
@@ -387,6 +390,34 @@ export async function challengeTagsForMember(memberId: string, ids: string[]): P
 
 export async function getOpenChallenges(): Promise<Challenge[]> {
   return (await getAllChallenges()).filter(c => c.kind !== 'trivia' && c.visibility === 'open' && getChallengeDisplayStatus(c) === 'active');
+}
+
+export async function getAcceptedParticipantCount(challengeId: string): Promise<number> {
+  return (await getChallengeParticipants(challengeId)).filter(p => p.status === 'accepted').length;
+}
+
+// Live or upcoming featured challenges, oldest feature first so the main page order stays stable.
+export async function getFeaturedChallenges(): Promise<Challenge[]> {
+  return (await getAllChallenges())
+    .filter(c => c.kind !== 'trivia' && c.featureStatus === 'featured' && getChallengeDisplayStatus(c) === 'active')
+    .sort((a, b) => (a.featuredAt ?? a.createdAt).localeCompare(b.featuredAt ?? b.createdAt));
+}
+
+// Ended (not cancelled) distance challenges, most recently finished first.
+export async function getEndedChallenges(): Promise<Challenge[]> {
+  return (await getAllChallenges())
+    .filter(c => c.kind !== 'trivia' && getChallengeDisplayStatus(c) === 'ended')
+    .sort((a, b) => b.endDate!.localeCompare(a.endDate!));
+}
+
+// ─── App settings ────────────────────────────────────────────────────────────
+export async function getAppSettings(): Promise<AppSettings> {
+  try {
+    const s = await getRedis().get<Partial<AppSettings>>(KEYS.settings);
+    return s ? { ...DEFAULT_APP_SETTINGS, ...s } : DEFAULT_APP_SETTINGS;
+  } catch {
+    return DEFAULT_APP_SETTINGS;
+  }
 }
 
 // Re-export for convenience
