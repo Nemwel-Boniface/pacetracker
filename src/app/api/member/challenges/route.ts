@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getActor } from '@/lib/actor';
-import { getMember, getMemberChallenges, saveChallenge, saveChallengeParticipant, getChallengeParticipant, getChallengeParticipants, computeChallengeProgress, computeChallengePace, getOpenChallenges, getFeatureCapacity } from '@/lib/data';
+import { getMember, getMemberChallenges, saveChallenge, saveChallengeParticipant, getChallengeParticipant, getChallengeParticipants, computeChallengeProgress, computeChallengePace, getOpenChallenges, getFeatureCapacity, resolveCoFacilitators, joinCoFacilitators } from '@/lib/data';
 import { Challenge, ChallengeParticipant, ChallengeCategory, ChallengePeriod, ChallengeVisibility, computeChallengeEndDate, getChallengeDisplayStatus, isChallengeUpcoming, CHALLENGE_DESCRIPTION_MAX } from '@/types';
 import {
   buildTriviaGame, saveTriviaGame, getTriviaGame, isScheduledInFuture,
@@ -109,12 +109,16 @@ export async function POST(req: NextRequest) {
       if (cap.full) return NextResponse.json({ error: `${cap.current} challenges are already featured (limit ${cap.max})`, code: 'cap_reached', ...cap }, { status: 409 });
     }
 
+    const facilitators = await resolveCoFacilitators(member.id, body.coFacilitatorIds);
+    if ('error' in facilitators) return NextResponse.json({ error: facilitators.error }, { status: 400 });
+
     const challenge: Challenge = {
       id: uuidv4(), ownerId: member.id, ownerName: member.name, kind: 'distance',
       title: trimmedTitle, category, period, goalKm: Math.round(goal * 10) / 10,
       // A featured challenge has to be joinable by whoever sees it on the main page.
       visibility: wantsFeature ? 'open' : visibility, taggedOnly: true,
       ...(description && { description }),
+      ...(facilitators.coFacilitators.length > 0 && { coFacilitators: facilitators.coFacilitators }),
       ...(wantsFeature && (session.isAdmin ? { featureStatus: 'featured' as const, featuredAt: now } : { featureStatus: 'requested' as const })),
       startDate, endDate, status: 'active', createdAt: now,
     };
@@ -125,6 +129,7 @@ export async function POST(req: NextRequest) {
     };
 
     await Promise.all([saveChallenge(challenge), saveChallengeParticipant(ownerParticipant)]);
+    await joinCoFacilitators(challenge);
     return NextResponse.json({ challenge }, { status: 201 });
   } catch { return NextResponse.json({ error: 'Failed to create challenge' }, { status: 500 }); }
 }
