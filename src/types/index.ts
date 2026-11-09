@@ -44,7 +44,8 @@ export function getCountryFlag(country: string, configs: CountryConfig[]): strin
 }
 
 export type ChallengeCategory = 'run_walk' | 'cycling';
-export type ChallengePeriod = 'weekly' | 'monthly';
+// 'custom' = the creator picked both the start and end date.
+export type ChallengePeriod = 'weekly' | 'monthly' | 'custom';
 export type ChallengeStatus = 'active' | 'cancelled';
 export type ChallengeInviteStatus = 'pending' | 'accepted' | 'declined' | 'left';
 // A Challenge with no `kind` is a legacy record — always treat it as 'distance', never write a backfill.
@@ -108,10 +109,16 @@ export const CHALLENGE_CATEGORY_LABELS: Record<ChallengeCategory, string> = {
   run_walk: '🏃 Run / Walk / Hike',
   cycling: '🚴 Cycling',
 };
-export const CHALLENGE_PERIOD_LABELS: Record<ChallengePeriod, string> = { weekly: 'Weekly', monthly: 'Monthly' };
-export const CHALLENGE_PERIOD_DAYS: Record<ChallengePeriod, number> = { weekly: 7, monthly: 30 };
+export const CHALLENGE_PERIOD_LABELS: Record<ChallengePeriod, string> = { weekly: 'Weekly', monthly: 'Monthly', custom: 'Custom dates' };
+export const CHALLENGE_PERIOD_DAYS: Record<Exclude<ChallengePeriod, 'custom'>, number> = { weekly: 7, monthly: 30 };
+export const MAX_CHALLENGE_DAYS = 366;
 
-export function computeChallengeEndDate(startDate: string, period: ChallengePeriod): string {
+// Inclusive length of a challenge in days, from its actual dates (works for every period).
+export function challengeLengthDays(startDate: string, endDate: string): number {
+  return Math.round((new Date(endDate + 'T12:00:00Z').getTime() - new Date(startDate + 'T12:00:00Z').getTime()) / 86400000) + 1;
+}
+
+export function computeChallengeEndDate(startDate: string, period: Exclude<ChallengePeriod, 'custom'>): string {
   const d = new Date(startDate + 'T12:00:00Z');
   d.setUTCDate(d.getUTCDate() + CHALLENGE_PERIOD_DAYS[period] - 1);
   return d.toISOString().slice(0, 10);

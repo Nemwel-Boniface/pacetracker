@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Challenge, ChallengeCategory, ChallengePeriod, ChallengeVisibility, ChallengeLeaderboardEntry, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_DESCRIPTION_MAX, MAX_CO_FACILITATORS, facilitatorNames } from '@/types';
+import { Challenge, ChallengeCategory, ChallengePeriod, ChallengeVisibility, ChallengeLeaderboardEntry, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_PERIOD_DAYS, CHALLENGE_DESCRIPTION_MAX, MAX_CHALLENGE_DAYS, challengeLengthDays, computeChallengeEndDate, MAX_CO_FACILITATORS, facilitatorNames } from '@/types';
 import { actorInit } from '@/lib/actorClient';
 import PeoplePicker, { PersonSelect } from '@/components/PeoplePicker';
 import { TriviaPhase, TriviaQuestionPhase, TriviaVisibility } from '@/lib/trivia';
@@ -326,7 +326,7 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [challengeKind, setChallengeKind] = useState<'distance' | 'trivia'>('distance');
-  const emptyForm = () => ({ title: '', category: 'run_walk' as ChallengeCategory, period: 'monthly' as ChallengePeriod, goalKm: '', visibility: 'open' as ChallengeVisibility, startDate: localToday(), description: '', requestFeature: false, coFacilitatorIds: [] as string[] });
+  const emptyForm = () => ({ title: '', category: 'run_walk' as ChallengeCategory, period: 'monthly' as ChallengePeriod, goalKm: '', visibility: 'open' as ChallengeVisibility, startDate: localToday(), endDate: '', description: '', requestFeature: false, coFacilitatorIds: [] as string[] });
   const [form, setForm] = useState(emptyForm);
   const [view, setView] = useState<'current' | 'past'>('current');
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
@@ -362,6 +362,8 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
     if (!form.title.trim()) { setError('Give your challenge a name'); return; }
     const goal = parseFloat(form.goalKm);
     if (!goal || goal <= 0) { setError('Enter a goal distance'); return; }
+    if (form.period === 'custom' && !formEndDate) { setError('Pick an end date on or after the start date'); return; }
+    if (form.period === 'custom' && formDays > MAX_CHALLENGE_DAYS) { setError(`A challenge can run for at most ${MAX_CHALLENGE_DAYS} days`); return; }
     if (form.requestFeature && !form.description.trim()) { setError('Add a description: it is what people see on the main page'); return; }
     setCreating(true);
     try {
@@ -437,7 +439,10 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
     } catch { toast.error('Connection error'); } finally { setRespondingId(null); }
   }
 
-  const weeklyPace = form.period === 'monthly' && form.goalKm ? Math.round((parseFloat(form.goalKm) / 30) * 7 * 10) / 10 : null;
+  // The date range the form will create: fixed length for weekly/monthly, the picked end date for custom.
+  const formEndDate = form.period === 'custom' ? (form.endDate >= form.startDate ? form.endDate : '') : computeChallengeEndDate(form.startDate, form.period);
+  const formDays = formEndDate ? challengeLengthDays(form.startDate, formEndDate) : 0;
+  const weeklyPace = formDays > 7 && form.goalKm ? Math.round((parseFloat(form.goalKm) / formDays) * 7 * 10) / 10 : null;
 
   const segBtn = (active: boolean) => ({ flex: 1, padding: '10px 8px', borderRadius: 10, border: `1.5px solid ${active ? '#1a7a4a' : '#e5e7eb'}`, background: active ? '#1a7a4a' : 'white', color: active ? 'white' : '#374151', fontWeight: 700, fontSize: 13, cursor: 'pointer' as const, transition: 'all 0.15s' });
 
@@ -482,8 +487,9 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
               <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Period *</label>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" onClick={() => setForm({ ...form, period: 'weekly' })} style={segBtn(form.period === 'weekly')}>Weekly (7 days)</button>
-                  <button type="button" onClick={() => setForm({ ...form, period: 'monthly' })} style={segBtn(form.period === 'monthly')}>Monthly (30 days)</button>
+                  <button type="button" onClick={() => setForm({ ...form, period: 'weekly' })} style={segBtn(form.period === 'weekly')}>Weekly ({CHALLENGE_PERIOD_DAYS.weekly} days)</button>
+                  <button type="button" onClick={() => setForm({ ...form, period: 'monthly' })} style={segBtn(form.period === 'monthly')}>Monthly ({CHALLENGE_PERIOD_DAYS.monthly} days)</button>
+                  <button type="button" onClick={() => setForm({ ...form, period: 'custom' })} style={segBtn(form.period === 'custom')}>📆 Custom dates</button>
                 </div>
               </div>
               <div style={{ marginBottom: 14 }}>
@@ -493,6 +499,17 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
                   {form.startDate > localToday() ? 'People can join before it starts. Only activities from the start date count.' : 'Starts today.'}
                 </div>
               </div>
+              {form.period === 'custom' && (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>End Date *</label>
+                  <input type="date" value={form.endDate} min={form.startDate} onChange={e => setForm({ ...form, endDate: e.target.value })} style={inp} />
+                </div>
+              )}
+              {formEndDate && (
+                <div style={{ fontSize: 12, color: '#166534', background: '#f0fdf4', borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>
+                  📆 Runs {fmtShortDate(form.startDate)} – {fmtShortDate(formEndDate)} · {formDays} day{formDays === 1 ? '' : 's'}
+                </div>
+              )}
               <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Goal Distance — km *</label>
                 <input type="number" min="0" step="0.1" value={form.goalKm} onChange={e => setForm({ ...form, goalKm: e.target.value })} placeholder="e.g. 120" style={inp} />

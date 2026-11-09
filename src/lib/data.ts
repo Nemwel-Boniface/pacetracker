@@ -1,5 +1,5 @@
 import { getRedis, KEYS } from './redis';
-import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier, Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, ActivityType, getChallengeDisplayStatus, CHALLENGE_CATEGORY_ACTIVITY_TYPES, CHALLENGE_PERIOD_DAYS, AppSettings, DEFAULT_APP_SETTINGS, MAX_CO_FACILITATORS } from '@/types';
+import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier, Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, ActivityType, getChallengeDisplayStatus, CHALLENGE_CATEGORY_ACTIVITY_TYPES, challengeLengthDays, AppSettings, DEFAULT_APP_SETTINGS, MAX_CO_FACILITATORS } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 
@@ -325,7 +325,7 @@ export async function computeChallengeProgress(challenge: Challenge, memberId: s
 }
 
 export function computeChallengePace(challenge: Challenge, progressKm: number): ChallengePace {
-  const periodDays = CHALLENGE_PERIOD_DAYS[challenge.period!];
+  const periodDays = challengeLengthDays(challenge.startDate!, challenge.endDate!);
   const today = new Date().toISOString().slice(0, 10);
   const percentageSoFar = Math.min(100, Math.round((progressKm / challenge.goalKm!) * 100));
   // Not started yet — nobody can be behind a pace that hasn't begun.

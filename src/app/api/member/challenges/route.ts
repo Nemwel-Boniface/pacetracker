@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getActor } from '@/lib/actor';
 import { getMember, getMemberChallenges, saveChallenge, saveChallengeParticipant, getChallengeParticipant, getChallengeParticipants, computeChallengeProgress, computeChallengePace, getOpenChallenges, getFeatureCapacity, resolveCoFacilitators, joinCoFacilitators } from '@/lib/data';
-import { Challenge, ChallengeParticipant, ChallengeCategory, ChallengePeriod, ChallengeVisibility, computeChallengeEndDate, getChallengeDisplayStatus, isChallengeUpcoming, CHALLENGE_DESCRIPTION_MAX } from '@/types';
+import { Challenge, ChallengeParticipant, ChallengeCategory, ChallengePeriod, ChallengeVisibility, computeChallengeEndDate, challengeLengthDays, MAX_CHALLENGE_DAYS, getChallengeDisplayStatus, isChallengeUpcoming, CHALLENGE_DESCRIPTION_MAX } from '@/types';
 import {
   buildTriviaGame, saveTriviaGame, getTriviaGame, isScheduledInFuture,
   MIN_TEAMS, MAX_TEAMS, MIN_TIMER_SECONDS, MAX_TIMER_SECONDS, DEFAULT_TIMER_SECONDS,
@@ -10,7 +10,7 @@ import {
 } from '@/lib/trivia';
 
 const VALID_CATEGORIES: ChallengeCategory[] = ['run_walk', 'cycling'];
-const VALID_PERIODS: ChallengePeriod[] = ['weekly', 'monthly'];
+const VALID_PERIODS: ChallengePeriod[] = ['weekly', 'monthly', 'custom'];
 const VALID_PHASES = new Set<TriviaQuestionPhase>(['test', 'main', 'tiebreak']);
 const MAX_START_DAYS_AHEAD = 180;
 
@@ -96,7 +96,15 @@ export async function POST(req: NextRequest) {
     if (startDate < today) return NextResponse.json({ error: 'Start date cannot be in the past' }, { status: 400 });
     const latestStart = new Date(); latestStart.setUTCDate(latestStart.getUTCDate() + MAX_START_DAYS_AHEAD);
     if (startDate > latestStart.toISOString().slice(0, 10)) return NextResponse.json({ error: `Start date must be within ${MAX_START_DAYS_AHEAD} days` }, { status: 400 });
-    const endDate = computeChallengeEndDate(startDate, period);
+    let endDate: string;
+    if (period === 'custom') {
+      endDate = typeof body.endDate === 'string' ? body.endDate : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || Number.isNaN(new Date(endDate + 'T12:00:00Z').getTime())) return NextResponse.json({ error: 'Pick an end date for a custom challenge' }, { status: 400 });
+      if (endDate < startDate) return NextResponse.json({ error: 'End date must be on or after the start date' }, { status: 400 });
+      if (challengeLengthDays(startDate, endDate) > MAX_CHALLENGE_DAYS) return NextResponse.json({ error: `A challenge can run for at most ${MAX_CHALLENGE_DAYS} days` }, { status: 400 });
+    } else {
+      endDate = computeChallengeEndDate(startDate, period);
+    }
     const now = new Date().toISOString();
 
     const description = typeof body.description === 'string' ? body.description.trim() : '';
