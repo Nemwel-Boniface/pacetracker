@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_DESCRIPTION_MAX } from '@/types';
+import { Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_DESCRIPTION_MAX, MAX_CO_FACILITATORS, facilitatorNames } from '@/types';
 import { actorInit } from '@/lib/actorClient';
 import PeoplePicker from '@/components/PeoplePicker';
 
@@ -24,6 +24,7 @@ interface DetailResponse {
   upcoming: boolean;
   isAdmin: boolean;
   canRequestFeature: boolean;
+  isFacilitator: boolean;
 }
 
 function initials(name: string): string {
@@ -50,6 +51,7 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
   const [sendingInvites, setSendingInvites] = useState(false);
   const [busy, setBusy] = useState(false);
   const [featureDraft, setFeatureDraft] = useState<string | null>(null);
+  const [facilitatorDraft, setFacilitatorDraft] = useState<string[] | null>(null);
 
   function fetchData() {
     fetch(`/api/member/challenges/${id}`, actorInit(asAdmin))
@@ -125,6 +127,19 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
     } catch { toast.error('Connection error'); } finally { setBusy(false); }
   }
 
+  async function saveFacilitators() {
+    if (!facilitatorDraft) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/member/challenges/${id}/facilitators`, actorInit(asAdmin, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberIds: facilitatorDraft }) }));
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error || 'Failed to save'); return; }
+      toast.success('Co-facilitators updated 🤝');
+      setFacilitatorDraft(null);
+      fetchData();
+    } catch { toast.error('Connection error'); } finally { setBusy(false); }
+  }
+
   async function requestFeature() {
     if (!featureDraft?.trim()) { toast.error('Add a description first'); return; }
     setBusy(true);
@@ -190,7 +205,7 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
               {CHALLENGE_CATEGORY_LABELS[challenge.category!]} · {CHALLENGE_PERIOD_LABELS[challenge.period!]} · Goal {challenge.goalKm}km · {challenge.visibility === 'open' ? '🌍 Open' : '🔒 Invite-only'}
             </div>
             <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>
-              {fmtDateLabel(challenge.startDate!)} – {fmtDateLabel(challenge.endDate!)} · Created by {challenge.ownerName}
+              {fmtDateLabel(challenge.startDate!)} – {fmtDateLabel(challenge.endDate!)} · {challenge.coFacilitators?.length ? 'Facilitated' : 'Created'} by {facilitatorNames(challenge)}
             </div>
           </div>
           {displayStatus === 'cancelled' && <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 20, padding: '3px 11px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>Cancelled</span>}
@@ -200,6 +215,34 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
             : <span style={{ background: '#dcfce7', color: '#166534', borderRadius: 20, padding: '3px 11px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>Active</span>)}
         </div>
         {challenge.description && <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.6, margin: '12px 0 0', whiteSpace: 'pre-line' }}>{challenge.description}</p>}
+        <div style={{ marginTop: 12, background: '#f8fafc', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#475569' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            <span style={{ fontWeight: 700 }}>🤝 Facilitators:</span>
+            <span style={{ background: '#dcfce7', color: '#166534', borderRadius: 20, padding: '2px 9px', fontWeight: 700 }}>{challenge.ownerName} · Creator</span>
+            {(challenge.coFacilitators ?? []).map(f => (
+              <span key={f.id} style={{ background: '#e0f2fe', color: '#075985', borderRadius: 20, padding: '2px 9px', fontWeight: 700 }}>{f.name}{f.id === myMemberId ? ' (You)' : ''}</span>
+            ))}
+            {(isOwner || isAdmin) && displayStatus === 'active' && facilitatorDraft === null && (
+              <button onClick={() => setFacilitatorDraft((challenge.coFacilitators ?? []).map(f => f.id))} style={{ background: 'none', border: 'none', color: '#1a7a4a', fontWeight: 700, fontSize: 12, cursor: 'pointer', padding: 0 }}>✏️ Edit</button>
+            )}
+          </div>
+          <div style={{ marginTop: 4, color: '#64748b' }}>💬 Questions about this challenge? Reach out to any of them.</div>
+          {facilitatorDraft !== null && (
+            <div style={{ marginTop: 10 }}>
+              <PeoplePicker
+                people={peers.filter(p => p.id !== challenge.ownerId)}
+                selected={facilitatorDraft}
+                onChange={ids => setFacilitatorDraft(ids.slice(0, MAX_CO_FACILITATORS))}
+                placeholder="Search co-facilitators…"
+              />
+              <div style={{ fontSize: 11, color: '#94a3b8', margin: '5px 0 8px' }}>Up to {MAX_CO_FACILITATORS}. New co-facilitators are joined automatically.</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={saveFacilitators} disabled={busy} style={{ padding: '7px 14px', borderRadius: 8, background: '#1a7a4a', color: 'white', fontWeight: 700, fontSize: 12, border: 'none', cursor: 'pointer' }}>{busy ? 'Saving…' : 'Save'}</button>
+                <button onClick={() => setFacilitatorDraft(null)} style={{ padding: '7px 14px', borderRadius: 8, background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 12, border: '1px solid #e5e7eb', cursor: 'pointer' }}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {podium.length > 0 && (
