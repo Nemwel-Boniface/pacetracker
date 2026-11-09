@@ -1,5 +1,5 @@
 import { getRedis, KEYS } from './redis';
-import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier, Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, ActivityType, getChallengeDisplayStatus, CHALLENGE_CATEGORY_ACTIVITY_TYPES, CHALLENGE_PERIOD_DAYS, AppSettings, DEFAULT_APP_SETTINGS } from '@/types';
+import { Member, ActivityLog, MemberStats, PrizeCategory, Winner, CountryConfig, Feedback, DEFAULT_COUNTRIES, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS, getTier, Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, ActivityType, getChallengeDisplayStatus, CHALLENGE_CATEGORY_ACTIVITY_TYPES, CHALLENGE_PERIOD_DAYS, AppSettings, DEFAULT_APP_SETTINGS, MAX_CO_FACILITATORS } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 
@@ -390,6 +390,33 @@ export async function challengeTagsForMember(memberId: string, ids: string[]): P
 
 export async function getOpenChallenges(): Promise<Challenge[]> {
   return (await getAllChallenges()).filter(c => c.kind !== 'trivia' && c.visibility === 'open' && getChallengeDisplayStatus(c) === 'active');
+}
+
+// Validates picked co-facilitators: active, real members, not the owner. Returns an error message on a bad pick.
+export async function resolveCoFacilitators(ownerId: string, requestedIds: unknown): Promise<{ coFacilitators: { id: string; name: string }[] } | { error: string }> {
+  const ids = Array.isArray(requestedIds) ? [...new Set(requestedIds.filter((x): x is string => typeof x === 'string' && x !== ownerId))] : [];
+  if (ids.length > MAX_CO_FACILITATORS) return { error: `Pick at most ${MAX_CO_FACILITATORS} co-facilitators` };
+  const coFacilitators: { id: string; name: string }[] = [];
+  for (const id of ids) {
+    const m = await getMember(id);
+    if (!m || !m.isActive || m.isShadowUser) return { error: 'One of the selected co-facilitators is not an active member' };
+    coFacilitators.push({ id: m.id, name: m.name });
+  }
+  return { coFacilitators };
+}
+
+// Joins each co-facilitator to the challenge so it shows up in their own Challenges list.
+export async function joinCoFacilitators(challenge: Challenge): Promise<void> {
+  const now = new Date().toISOString();
+  for (const f of challenge.coFacilitators ?? []) {
+    const existing = await getChallengeParticipant(challenge.id, f.id);
+    if (existing?.status === 'accepted') continue;
+    await saveChallengeParticipant({
+      ...(existing ?? { invitedAt: now }),
+      challengeId: challenge.id, memberId: f.id, memberName: f.name, status: 'accepted',
+      invitedBy: challenge.ownerId, invitedByName: challenge.ownerName, respondedAt: now,
+    });
+  }
 }
 
 export async function getAcceptedParticipantCount(challengeId: string): Promise<number> {

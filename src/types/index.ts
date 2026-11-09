@@ -78,6 +78,8 @@ export interface Challenge {
   description?: string;
   featureStatus?: ChallengeFeatureStatus;
   featuredAt?: string;
+  // People who help the owner run the challenge and answer questions. Joined automatically and can invite.
+  coFacilitators?: { id: string; name: string }[];
   // Can be a future date: people can join early, but only activities from startDate on count.
   startDate?: string;
   endDate?: string;
@@ -125,6 +127,15 @@ export function isChallengeUpcoming(c: Challenge): boolean {
   return getChallengeDisplayStatus(c) === 'active' && new Date().toISOString().slice(0, 10) < c.startDate!;
 }
 export const CHALLENGE_DESCRIPTION_MAX = 500;
+export const MAX_CO_FACILITATORS = 5;
+export function isChallengeFacilitator(c: Challenge, memberId: string): boolean {
+  return c.ownerId === memberId || (c.coFacilitators ?? []).some(f => f.id === memberId);
+}
+// "Jane", "Jane & John", "Jane, John & Amy" — the owner first.
+export function facilitatorNames(c: Challenge): string {
+  const names = [c.ownerName, ...(c.coFacilitators ?? []).map(f => f.name)];
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
+}
 export const DEFAULT_MAX_FEATURED_CHALLENGES = 3;
 
 export interface AppSettings {
