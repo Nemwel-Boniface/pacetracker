@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS } from '@/types';
+import { Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_DESCRIPTION_MAX } from '@/types';
 import { actorInit } from '@/lib/actorClient';
 import PeoplePicker from '@/components/PeoplePicker';
 
@@ -21,6 +21,9 @@ interface DetailResponse {
   canCancel: boolean;
   participants?: ChallengeParticipant[];
   displayStatus: 'active' | 'ended' | 'cancelled';
+  upcoming: boolean;
+  isAdmin: boolean;
+  canRequestFeature: boolean;
 }
 
 function initials(name: string): string {
@@ -46,6 +49,7 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
   const [inviteIds, setInviteIds] = useState<string[]>([]);
   const [sendingInvites, setSendingInvites] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [featureDraft, setFeatureDraft] = useState<string | null>(null);
 
   function fetchData() {
     fetch(`/api/member/challenges/${id}`, actorInit(asAdmin))
@@ -121,6 +125,37 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
     } catch { toast.error('Connection error'); } finally { setBusy(false); }
   }
 
+  async function requestFeature() {
+    if (!featureDraft?.trim()) { toast.error('Add a description first'); return; }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/member/challenges/${id}/feature-request`, actorInit(asAdmin, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description: featureDraft }) }));
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error || 'Failed to send request'); return; }
+      toast.success('Request sent! An admin will review it ⭐');
+      setFeatureDraft(null);
+      fetchData();
+    } catch { toast.error('Connection error'); } finally { setBusy(false); }
+  }
+
+  // Admin only. Featuring past the limit asks once, then retries with an override.
+  async function setFeatured(action: 'feature' | 'unfeature' | 'decline') {
+    setBusy(true);
+    try {
+      const send = (override: boolean) => fetch(`/api/challenges/${id}/feature`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, override, ...(featureDraft !== null && { description: featureDraft }) }) });
+      let res = await send(false);
+      let d = await res.json();
+      if (res.status === 409 && d.code === 'cap_reached') {
+        if (!confirm(`${d.current} challenges are already featured (limit ${d.max}). Feature this one anyway?`)) return;
+        res = await send(true); d = await res.json();
+      }
+      if (!res.ok) { toast.error(d.error || 'Failed to update'); return; }
+      toast.success(action === 'feature' ? 'Featured on the main page ⭐' : action === 'unfeature' ? 'Removed from the main page' : 'Request declined');
+      setFeatureDraft(null);
+      fetchData();
+    } catch { toast.error('Connection error'); } finally { setBusy(false); }
+  }
+
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '4rem' }}>
       <div style={{ width: 32, height: 32, border: '4px solid #1a7a4a', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
@@ -128,7 +163,8 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
   );
   if (notFound || !data) return <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Challenge not found, or you don&apos;t have access to it.</div>;
 
-  const { challenge, leaderboard, myParticipant, myMemberId, myStats, pace, isOwner, canInvite, canJoin, canCancel, participants, displayStatus } = data;
+  const { challenge, leaderboard, myParticipant, myMemberId, myStats, pace, isOwner, canInvite, canJoin, canCancel, participants, displayStatus, upcoming, isAdmin, canRequestFeature } = data;
+  const podium = displayStatus === 'ended' ? leaderboard.filter(e => e.progressKm > 0).slice(0, 3) : [];
   const invitedIds = new Set((participants || []).filter(p => p.status === 'pending' || p.status === 'accepted').map(p => p.memberId));
   const invitablePeers = peers.filter(p => !invitedIds.has(p.id) && p.id !== challenge.ownerId);
   const isPendingSelf = myParticipant?.status === 'pending';
@@ -146,7 +182,10 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #f3f4f6', padding: 18, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div>
-            <h2 style={{ fontSize: 19, fontWeight: 900, color: '#1f2937', margin: '0 0 4px' }}>{challenge.title}</h2>
+            <h2 style={{ fontSize: 19, fontWeight: 900, color: '#1f2937', margin: '0 0 4px' }}>
+              {challenge.title}
+              {challenge.featureStatus === 'featured' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 20, padding: '2px 9px', fontSize: 11, fontWeight: 800, marginLeft: 8, verticalAlign: 'middle' }}>⭐ Featured</span>}
+            </h2>
             <div style={{ fontSize: 12, color: '#6b7280' }}>
               {CHALLENGE_CATEGORY_LABELS[challenge.category!]} · {CHALLENGE_PERIOD_LABELS[challenge.period!]} · Goal {challenge.goalKm}km · {challenge.visibility === 'open' ? '🌍 Open' : '🔒 Invite-only'}
             </div>
@@ -156,9 +195,68 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
           </div>
           {displayStatus === 'cancelled' && <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 20, padding: '3px 11px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>Cancelled</span>}
           {displayStatus === 'ended' && <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 20, padding: '3px 11px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>🏁 Ended</span>}
-          {displayStatus === 'active' && <span style={{ background: '#dcfce7', color: '#166534', borderRadius: 20, padding: '3px 11px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>Active</span>}
+          {displayStatus === 'active' && (upcoming
+            ? <span style={{ background: '#e0e7ff', color: '#3730a3', borderRadius: 20, padding: '3px 11px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>📅 Starts {fmtDateLabel(challenge.startDate!)}</span>
+            : <span style={{ background: '#dcfce7', color: '#166534', borderRadius: 20, padding: '3px 11px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>Active</span>)}
         </div>
+        {challenge.description && <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.6, margin: '12px 0 0', whiteSpace: 'pre-line' }}>{challenge.description}</p>}
       </div>
+
+      {podium.length > 0 && (
+        <div style={{ background: 'linear-gradient(135deg,#fef9c3,#fde68a)', border: '1px solid #fcd34d', borderRadius: 16, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontWeight: 800, color: '#92400e', marginBottom: 8 }}>🏆 Final results</div>
+          {podium.map((e, i) => (
+            <div key={e.memberId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '3px 0', color: '#78350f' }}>
+              <span>{['🥇', '🥈', '🥉'][i]} <strong>{e.memberName}</strong>{e.memberId === myMemberId ? ' (You)' : ''}</span>
+              <span>{e.progressKm}km · {e.percentage}%</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {canRequestFeature && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+          {featureDraft === null ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 200px', fontSize: 13, color: '#92400e', fontWeight: 600 }}>⭐ Want more people to join? Ask an admin to feature this challenge on the main page.</div>
+              <button onClick={() => setFeatureDraft(challenge.description ?? '')} style={{ padding: '8px 16px', borderRadius: 8, background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 12, border: 'none', cursor: 'pointer' }}>Request feature</button>
+            </div>
+          ) : (
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>Description for the main page *</label>
+              <textarea value={featureDraft} onChange={e => setFeatureDraft(e.target.value)} maxLength={CHALLENGE_DESCRIPTION_MAX} rows={3} placeholder="What's the challenge about, who is it for, and why should people join?" style={{ width: '100%', padding: '10px 12px', border: '1px solid #fde68a', borderRadius: 10, fontSize: 13, boxSizing: 'border-box', resize: 'vertical', outline: 'none' }} />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button onClick={requestFeature} disabled={busy} style={{ padding: '8px 16px', borderRadius: 8, background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 12, border: 'none', cursor: 'pointer' }}>{busy ? 'Sending…' : 'Send request'}</button>
+                <button onClick={() => setFeatureDraft(null)} style={{ padding: '8px 16px', borderRadius: 8, background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 12, border: '1px solid #e5e7eb', cursor: 'pointer' }}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {isOwner && !isAdmin && challenge.featureStatus === 'requested' && displayStatus === 'active' && (
+        <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 14, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#6b7280' }}>⏳ Your request to feature this challenge is waiting for an admin.</div>
+      )}
+
+      {isAdmin && asAdmin && displayStatus === 'active' && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+            ⭐ Main page · {challenge.featureStatus === 'featured' ? 'Featured' : challenge.featureStatus === 'requested' ? 'Feature requested' : 'Not featured'}
+          </div>
+          {challenge.featureStatus !== 'featured' && (featureDraft !== null || !challenge.description) && (
+            <textarea value={featureDraft ?? ''} onChange={e => setFeatureDraft(e.target.value)} maxLength={CHALLENGE_DESCRIPTION_MAX} rows={3} placeholder="Description shown on the main page and in the chatbot (required to feature)" style={{ width: '100%', padding: '10px 12px', border: '1px solid #fde68a', borderRadius: 10, fontSize: 13, boxSizing: 'border-box', resize: 'vertical', outline: 'none', marginBottom: 8 }} />
+          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {challenge.featureStatus === 'featured' ? (
+              <button onClick={() => setFeatured('unfeature')} disabled={busy} style={{ padding: '8px 16px', borderRadius: 8, background: 'white', color: '#92400e', fontWeight: 700, fontSize: 12, border: '1px solid #fcd34d', cursor: 'pointer' }}>Remove from main page</button>
+            ) : (<>
+              <button onClick={() => setFeatured('feature')} disabled={busy} style={{ padding: '8px 16px', borderRadius: 8, background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 12, border: 'none', cursor: 'pointer' }}>⭐ Feature on main page</button>
+              {challenge.description && featureDraft === null && <button onClick={() => setFeatureDraft(challenge.description ?? '')} style={{ padding: '8px 16px', borderRadius: 8, background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 12, border: '1px solid #e5e7eb', cursor: 'pointer' }}>Edit description</button>}
+              {challenge.featureStatus === 'requested' && <button onClick={() => setFeatured('decline')} disabled={busy} style={{ padding: '8px 16px', borderRadius: 8, background: 'white', color: '#dc2626', fontWeight: 600, fontSize: 12, border: '1px solid #fecaca', cursor: 'pointer' }}>Decline request</button>}
+            </>)}
+          </div>
+          {challenge.visibility !== 'open' && challenge.featureStatus !== 'featured' && <div style={{ fontSize: 11, color: '#92400e', marginTop: 8 }}>Featuring makes this challenge open so anyone can join.</div>}
+        </div>
+      )}
 
       {isPendingSelf ? (
         <div style={{ background: '#faf5ff', border: '1px solid #ddd6fe', borderRadius: 14, padding: 16, marginBottom: 16 }}>
@@ -175,13 +273,14 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
         </div>
       ) : isMember ? (
         <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 16, padding: 18, marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Your Standing{myRank ? ` — Rank #${myRank}` : ''}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Your Standing{myRank && !upcoming ? ` — Rank #${myRank}` : ''}</div>
+          {upcoming && <div style={{ fontSize: 13, color: '#166534', marginBottom: 8 }}>📅 You&apos;re in! It starts on <strong>{fmtDateLabel(challenge.startDate!)}</strong>. Activities from that day on can be tagged to it.</div>}
           <div style={{ background: 'rgba(255,255,255,0.6)', borderRadius: 20, height: 10, overflow: 'hidden', marginBottom: 8 }}>
             <div style={{ width: `${pace.percentage}%`, height: '100%', background: '#16a34a', borderRadius: 20, transition: 'width 0.3s' }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
             <span style={{ fontSize: 18, fontWeight: 900, color: '#14532d' }}>{myStats.km}km <span style={{ fontSize: 13, fontWeight: 600, color: '#166534' }}>/ {challenge.goalKm}km — {pace.percentage}%</span></span>
-            {displayStatus === 'active' && (pace.onPace
+            {displayStatus === 'active' && !upcoming && (pace.onPace
               ? <span style={{ fontSize: 12, fontWeight: 700, color: '#166534' }}>✅ On pace</span>
               : <span style={{ fontSize: 12, fontWeight: 700, color: '#9a3412' }}>⏳ Behind pace ({pace.expectedKm}km expected)</span>)}
           </div>
