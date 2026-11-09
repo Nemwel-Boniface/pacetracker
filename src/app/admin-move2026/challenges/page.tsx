@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { Challenge, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS } from '@/types';
 import { TriviaPhase } from '@/lib/trivia';
 import ChallengesHub from '@/components/challenges/ChallengesHub';
@@ -31,7 +32,11 @@ function DistanceRowView({ challenge: c, displayStatus, acceptedCount, pendingCo
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, rowGap: 8, flexWrap: 'wrap', padding: '14px 16px', borderBottom: '1px solid #fafafa' }}>
       <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: '#1f2937' }}>{c.title}</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: '#1f2937' }}>
+          {c.title}
+          {c.featureStatus === 'featured' && <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 20, padding: '1px 8px', fontSize: 10, fontWeight: 800, marginLeft: 6 }}>⭐ Featured</span>}
+          {c.featureStatus === 'requested' && <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 20, padding: '1px 8px', fontSize: 10, fontWeight: 700, marginLeft: 6 }}>Feature requested</span>}
+        </div>
         <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
           Owner: {c.ownerName} · {CHALLENGE_CATEGORY_LABELS[c.category!]} · {CHALLENGE_PERIOD_LABELS[c.period!]} · Goal {c.goalKm}km · {c.visibility === 'open' ? '🌍 Open' : '🔒 Invite-only'}
         </div>
@@ -75,12 +80,33 @@ export default function AdminChallengesPage() {
   const [rows, setRows] = useState<ChallengeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'mine' | 'all'>('mine');
+  const [actingId, setActingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/challenges').then(r => r.json()).then(d => setRows(d.challenges || [])).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  function loadRows() {
+    return fetch('/api/challenges').then(r => r.json()).then(d => setRows(d.challenges || [])).catch(() => {});
+  }
+  useEffect(() => { loadRows().finally(() => setLoading(false)); }, []);
 
   const activeCount = rows.filter(r => r.kind === 'distance' && r.displayStatus === 'active').length;
+  const requests = rows.filter((r): r is DistanceRow => r.kind === 'distance' && r.displayStatus === 'active' && r.challenge.featureStatus === 'requested');
+  const featuredCount = rows.filter(r => r.kind === 'distance' && r.displayStatus === 'active' && r.challenge.featureStatus === 'featured').length;
+
+  // Featuring past the limit asks once, then retries with an override.
+  async function review(id: string, action: 'feature' | 'decline') {
+    setActingId(id);
+    try {
+      const send = (override: boolean) => fetch(`/api/challenges/${id}/feature`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, override }) });
+      let res = await send(false);
+      let d = await res.json();
+      if (res.status === 409 && d.code === 'cap_reached') {
+        if (!confirm(`${d.current} challenges are already featured (limit ${d.max}). Feature this one anyway?`)) return;
+        res = await send(true); d = await res.json();
+      }
+      if (!res.ok) { toast.error(d.error || 'Failed to update'); return; }
+      toast.success(action === 'feature' ? 'Featured on the main page ⭐' : 'Request declined');
+      await loadRows();
+    } catch { toast.error('Connection error'); } finally { setActingId(null); }
+  }
 
   return (
     <div style={{ padding: '20px 14px', maxWidth: 900, margin: '0 auto', boxSizing: 'border-box' }}>
@@ -91,6 +117,29 @@ export default function AdminChallengesPage() {
         </div>
         <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>Create your own challenges, or oversee every member&apos;s distance goals and trivia games</p>
       </div>
+
+      {requests.length > 0 && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 16, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 800, fontSize: 14, color: '#92400e' }}>⭐ Feature requests ({requests.length})</span>
+            <span style={{ fontSize: 11, color: '#92400e' }}>{featuredCount} featured right now</span>
+          </div>
+          {requests.map(({ challenge: c, acceptedCount }) => (
+            <div key={c.id} style={{ background: 'white', borderRadius: 12, padding: 14, marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#1f2937' }}>{c.title}</div>
+              <div style={{ fontSize: 11, color: '#9ca3af', margin: '2px 0 6px' }}>
+                by {c.ownerName} · Goal {c.goalKm}km · {fmtDate(c.startDate!)} – {fmtDate(c.endDate!)} · 👥 {acceptedCount}
+              </div>
+              {c.description && <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.5, marginBottom: 10, whiteSpace: 'pre-line' }}>{c.description}</div>}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => review(c.id, 'feature')} disabled={actingId === c.id} style={{ padding: '7px 14px', borderRadius: 8, background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 12, border: 'none', cursor: 'pointer' }}>⭐ Feature</button>
+                <button onClick={() => review(c.id, 'decline')} disabled={actingId === c.id} style={{ padding: '7px 14px', borderRadius: 8, background: 'white', color: '#dc2626', fontWeight: 600, fontSize: 12, border: '1px solid #fecaca', cursor: 'pointer' }}>Decline</button>
+                <Link href={`/admin-move2026/challenges/${c.id}`} style={{ padding: '7px 14px', borderRadius: 8, background: 'white', color: '#374151', fontWeight: 600, fontSize: 12, border: '1px solid #e5e7eb', textDecoration: 'none' }}>View →</Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {([['mine', '🎯 My Challenges'], ['all', '👀 All Challenges']] as const).map(([key, label]) => (

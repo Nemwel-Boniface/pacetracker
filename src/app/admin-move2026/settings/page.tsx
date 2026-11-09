@@ -20,6 +20,9 @@ export default function SettingsPage() {
   const [marathonCountries, setMarathonCountries] = useState<string[]>([]);
   const [togglingBanner, setTogglingBanner] = useState(false);
   const [savingCountries, setSavingCountries] = useState(false);
+  const [maxFeatured, setMaxFeatured] = useState('3');
+  const [savedMaxFeatured, setSavedMaxFeatured] = useState(3);
+  const [savingMaxFeatured, setSavingMaxFeatured] = useState(false);
 
   const [exportMeta, setExportMeta] = useState<{ generatedAt: string; sizeBytes: number } | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -63,6 +66,8 @@ export default function SettingsPage() {
       setCountries(cd.countries || []);
       setMarathonBannerEnabled(sd.settings?.marathonBannerEnabled ?? true);
       setMarathonCountries(sd.settings?.marathonCountries ?? []);
+      setMaxFeatured(String(sd.settings?.maxFeaturedChallenges ?? 3));
+      setSavedMaxFeatured(sd.settings?.maxFeaturedChallenges ?? 3);
       setExportMeta(ex.meta || null);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
@@ -109,6 +114,16 @@ export default function SettingsPage() {
     try {
       await fetch('/api/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marathonCountries: next }) });
     } catch { /* silent */ } finally { setSavingCountries(false); }
+  }
+
+  async function saveMaxFeatured() {
+    setSavingMaxFeatured(true);
+    try {
+      const res = await fetch('/api/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ maxFeaturedChallenges: Number(maxFeatured) }) });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Failed to save'); return; }
+      setSavedMaxFeatured(data.settings.maxFeaturedChallenges);
+    } catch { alert('Failed to save — connection error'); } finally { setSavingMaxFeatured(false); }
   }
 
   function toggleMarathonCountry(name: string) {
@@ -233,6 +248,25 @@ export default function SettingsPage() {
           </div>
         </>
       )}
+      {/* ─── Featured Challenges ─── */}
+      <div style={{ marginTop: 32, background: 'white', borderRadius: 16, border: '1px solid #fde68a', padding: '16px 20px', marginBottom: 20 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, color: '#92400e', marginBottom: 4 }}>⭐ Featured challenges on the main page</div>
+        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+          How many challenges can be featured at once. You can still go past this for a single challenge: you&apos;ll be asked to confirm.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <input type="number" min={1} max={20} step={1} value={maxFeatured} onChange={e => setMaxFeatured(e.target.value)} style={{ ...inp, width: 90 }} />
+          <button
+            onClick={saveMaxFeatured}
+            disabled={savingMaxFeatured || Number(maxFeatured) === savedMaxFeatured}
+            style={{ padding: '10px 18px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13, background: savingMaxFeatured || Number(maxFeatured) === savedMaxFeatured ? '#9ca3af' : '#1a7a4a', color: 'white', cursor: savingMaxFeatured || Number(maxFeatured) === savedMaxFeatured ? 'not-allowed' : 'pointer' }}
+          >
+            {savingMaxFeatured ? 'Saving…' : 'Save'}
+          </button>
+          <span style={{ fontSize: 12, color: '#9ca3af' }}>Default is 3</span>
+        </div>
+      </div>
+
       {/* ─── Marathon Banner ─── */}
       <div style={{ marginTop: 32, background: 'white', borderRadius: 16, border: '1px solid #e0e7ef', overflow: 'hidden', marginBottom: 20 }}>
         <div style={{ background: 'linear-gradient(135deg,#1e3a5f,#1a4a8a)', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
