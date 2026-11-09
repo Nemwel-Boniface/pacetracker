@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Challenge, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS } from '@/types';
+import { Challenge, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, facilitatorNames } from '@/types';
 import { TriviaPhase } from '@/lib/trivia';
 import ChallengesHub from '@/components/challenges/ChallengesHub';
 
@@ -38,7 +38,7 @@ function DistanceRowView({ challenge: c, displayStatus, acceptedCount, pendingCo
           {c.featureStatus === 'requested' && <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 20, padding: '1px 8px', fontSize: 10, fontWeight: 700, marginLeft: 6 }}>Feature requested</span>}
         </div>
         <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
-          Owner: {c.ownerName} · {CHALLENGE_CATEGORY_LABELS[c.category!]} · {CHALLENGE_PERIOD_LABELS[c.period!]} · Goal {c.goalKm}km · {c.visibility === 'open' ? '🌍 Open' : '🔒 Invite-only'}
+          {c.coFacilitators?.length ? `Facilitators: ${facilitatorNames(c)}` : `Owner: ${c.ownerName}`} · {CHALLENGE_CATEGORY_LABELS[c.category!]} · {CHALLENGE_PERIOD_LABELS[c.period!]} · Goal {c.goalKm}km · {c.visibility === 'open' ? '🌍 Open' : '🔒 Invite-only'}
         </div>
         <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{fmtDate(c.startDate!)} – {fmtDate(c.endDate!)}</div>
       </div>
@@ -128,7 +128,7 @@ export default function AdminChallengesPage() {
             <div key={c.id} style={{ background: 'white', borderRadius: 12, padding: 14, marginBottom: 8 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: '#1f2937' }}>{c.title}</div>
               <div style={{ fontSize: 11, color: '#9ca3af', margin: '2px 0 6px' }}>
-                by {c.ownerName} · Goal {c.goalKm}km · {fmtDate(c.startDate!)} – {fmtDate(c.endDate!)} · 👥 {acceptedCount}
+                by {facilitatorNames(c)} · Goal {c.goalKm}km · {fmtDate(c.startDate!)} – {fmtDate(c.endDate!)} · 👥 {acceptedCount}
               </div>
               {c.description && <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.5, marginBottom: 10, whiteSpace: 'pre-line' }}>{c.description}</div>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
