@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getViewer } from '@/lib/actor';
 import { getFeaturedChallenges, getEndedChallenges, getChallengeParticipant, getAcceptedParticipantCount, getChallengeLeaderboard, computeChallengePace } from '@/lib/data';
-import { Challenge, isChallengeUpcoming } from '@/types';
+import { Challenge, isChallengeUpcoming, isChallengeFacilitator } from '@/types';
 
 const PAST_LIMIT = 10;
 
@@ -12,7 +12,7 @@ function daysFromToday(date: string): number {
 
 // Only what the public card needs — never the participant list.
 function publicFields(c: Challenge) {
-  return { id: c.id, title: c.title, description: c.description ?? '', category: c.category!, period: c.period!, goalKm: c.goalKm!, startDate: c.startDate!, endDate: c.endDate!, ownerName: c.ownerName };
+  return { id: c.id, title: c.title, description: c.description ?? '', category: c.category!, period: c.period!, goalKm: c.goalKm!, startDate: c.startDate!, endDate: c.endDate!, ownerName: c.ownerName, coFacilitators: (c.coFacilitators ?? []).map(f => f.name) };
 }
 
 // Public: featured challenges for the main page and the chatbot. Signed-in viewers also get their own
@@ -57,8 +57,8 @@ export async function GET(req: NextRequest) {
         daysRemaining: Math.max(0, daysFromToday(c.endDate!) + 1),
         joined, invited: participant?.status === 'pending', me,
         canJoin: !!viewer && !joined,
-        // Inviting others from the chatbot / main page is for the challenge owner and admins only.
-        canInvite: !!viewer && (c.ownerId === viewer.memberId || viewer.isAdmin),
+        // Inviting others from the chatbot / main page is for the owner, co-facilitators and admins only.
+        canInvite: !!viewer && (isChallengeFacilitator(c, viewer.memberId) || viewer.isAdmin),
       };
     }));
 
