@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Challenge, ChallengeCategory, ChallengePeriod, ChallengeVisibility, ChallengeLeaderboardEntry, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_DESCRIPTION_MAX } from '@/types';
+import { Challenge, ChallengeCategory, ChallengePeriod, ChallengeVisibility, ChallengeLeaderboardEntry, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_DESCRIPTION_MAX, MAX_CO_FACILITATORS, facilitatorNames } from '@/types';
 import { actorInit } from '@/lib/actorClient';
-import { PersonSelect } from '@/components/PeoplePicker';
+import PeoplePicker, { PersonSelect } from '@/components/PeoplePicker';
 import { TriviaPhase, TriviaQuestionPhase, TriviaVisibility } from '@/lib/trivia';
 
 const inp = { width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' };
@@ -79,6 +79,7 @@ function DistanceChallengeCard({ entry, basePath }: { entry: DistanceChallengeEn
             <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
               {CHALLENGE_CATEGORY_LABELS[challenge.category!]} · {CHALLENGE_PERIOD_LABELS[challenge.period!]} · 👥 {entry.participantCount} · {challenge.visibility === 'open' ? '🌍 Open' : '🔒 Invite-only'}
             </div>
+            {challenge.coFacilitators?.length ? <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>🤝 Facilitated by {facilitatorNames(challenge)}</div> : null}
           </div>
           <StatusPill entry={entry} />
         </div>
@@ -103,7 +104,7 @@ function HistoryCard({ entry, basePath }: { entry: HistoryEntry; basePath: strin
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: '#1f2937' }}>{challenge.title}<FeatureBadge challenge={challenge} /></div>
             <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
-              {fmtShortDate(challenge.startDate!)} – {fmtShortDate(challenge.endDate!)} · Goal {challenge.goalKm}km · 👥 {entry.participantCount} · by {challenge.ownerName}
+              {fmtShortDate(challenge.startDate!)} – {fmtShortDate(challenge.endDate!)} · Goal {challenge.goalKm}km · 👥 {entry.participantCount} · by {facilitatorNames(challenge)}
             </div>
           </div>
           {entry.myRank && <span style={{ background: '#f0fdf4', color: '#166534', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>You: #{entry.myRank} · {entry.myKm}km</span>}
@@ -325,7 +326,7 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [challengeKind, setChallengeKind] = useState<'distance' | 'trivia'>('distance');
-  const emptyForm = () => ({ title: '', category: 'run_walk' as ChallengeCategory, period: 'monthly' as ChallengePeriod, goalKm: '', visibility: 'open' as ChallengeVisibility, startDate: localToday(), description: '', requestFeature: false });
+  const emptyForm = () => ({ title: '', category: 'run_walk' as ChallengeCategory, period: 'monthly' as ChallengePeriod, goalKm: '', visibility: 'open' as ChallengeVisibility, startDate: localToday(), description: '', requestFeature: false, coFacilitatorIds: [] as string[] });
   const [form, setForm] = useState(emptyForm);
   const [view, setView] = useState<'current' | 'past'>('current');
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
@@ -507,6 +508,18 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
                   {form.requestFeature ? 'Featured challenges are always open so anyone on the main page can join.' : form.visibility === 'open' ? 'Listed for everyone to discover and join. Members who join can invite others too.' : 'Hidden from others. Only people you invite can join.'}
                 </div>
               </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Co-facilitators (optional)</label>
+                <PeoplePicker
+                  people={peers}
+                  selected={form.coFacilitatorIds}
+                  onChange={ids => setForm({ ...form, coFacilitatorIds: ids.slice(0, MAX_CO_FACILITATORS) })}
+                  placeholder="Search people who'll help run it…"
+                />
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 5 }}>
+                  Up to {MAX_CO_FACILITATORS}. They&apos;re joined automatically, can invite people, and are shown as contacts for questions.
+                </div>
+              </div>
               <div style={{ marginBottom: 14, background: form.requestFeature ? '#fffbeb' : '#fafaf9', border: `1px solid ${form.requestFeature ? '#fde68a' : '#f3f4f6'}`, borderRadius: 12, padding: 14 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#374151' }}>
                   <input type="checkbox" checked={form.requestFeature} onChange={e => setForm({ ...form, requestFeature: e.target.checked, ...(e.target.checked && { visibility: 'open' as ChallengeVisibility }) })} style={{ width: 16, height: 16, accentColor: '#1a7a4a' }} />
@@ -634,7 +647,7 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
               <Link href={`${basePath}/${d.challenge.id}`} style={{ flex: '1 1 200px', minWidth: 0, textDecoration: 'none' }}>
                 <div style={{ fontWeight: 800, fontSize: 14, color: '#1f2937' }}>{d.challenge.title}</div>
                 <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>
-                  {CHALLENGE_CATEGORY_LABELS[d.challenge.category!]} · {CHALLENGE_PERIOD_LABELS[d.challenge.period!]} · Goal {d.challenge.goalKm}km · 👥 {d.participantCount} · by {d.challenge.ownerName}
+                  {CHALLENGE_CATEGORY_LABELS[d.challenge.category!]} · {CHALLENGE_PERIOD_LABELS[d.challenge.period!]} · Goal {d.challenge.goalKm}km · 👥 {d.participantCount} · by {facilitatorNames(d.challenge)}
                 </div>
               </Link>
               <button onClick={() => join(d.challenge.id)} disabled={respondingId === d.challenge.id} style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 8, background: '#f26522', color: 'white', fontWeight: 700, fontSize: 12, border: 'none', cursor: 'pointer' }}>
