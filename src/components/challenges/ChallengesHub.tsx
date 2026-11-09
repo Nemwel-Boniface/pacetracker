@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Challenge, ChallengeCategory, ChallengePeriod, ChallengeVisibility, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS } from '@/types';
+import { Challenge, ChallengeCategory, ChallengePeriod, ChallengeVisibility, ChallengeLeaderboardEntry, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_DESCRIPTION_MAX } from '@/types';
 import { actorInit } from '@/lib/actorClient';
 import { PersonSelect } from '@/components/PeoplePicker';
 import { TriviaPhase, TriviaQuestionPhase, TriviaVisibility } from '@/lib/trivia';
@@ -18,6 +18,7 @@ interface DistanceChallengeEntry {
   daysRemaining: number;
   participantCount: number;
   displayStatus: 'active' | 'ended' | 'cancelled';
+  upcoming?: boolean;
 }
 interface TriviaChallengeEntry {
   kind: 'trivia';
@@ -34,6 +35,20 @@ type ChallengeEntry = DistanceChallengeEntry | TriviaChallengeEntry;
 interface InviteEntry { challenge: Challenge; invitedByName: string; invitedAt: string; }
 interface DiscoverEntry { challenge: Challenge; participantCount: number; }
 interface Peer { id: string; name: string; avatarInitials: string; }
+interface HistoryEntry { challenge: Challenge; participantCount: number; podium: ChallengeLeaderboardEntry[]; myRank: number | null; myKm: number | null; }
+
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+function localToday(): string { return new Date().toLocaleDateString('en-CA'); }
+function fmtShortDate(date: string): string {
+  return new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function FeatureBadge({ challenge }: { challenge: Challenge }) {
+  if (challenge.featureStatus === 'featured') return <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 20, padding: '1px 8px', fontSize: 10, fontWeight: 800, marginLeft: 6, verticalAlign: 'middle' }}>⭐ Featured</span>;
+  if (challenge.featureStatus === 'requested') return <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 20, padding: '1px 8px', fontSize: 10, fontWeight: 700, marginLeft: 6, verticalAlign: 'middle' }}>Feature requested</span>;
+  return null;
+}
 
 const TRIVIA_PHASE_LABEL: Record<TriviaPhase, string> = { idle: 'Not started', test: '🧪 Practice', main: '🔴 Live', tiebreak: '⚡ Tiebreak', finished: '🏁 Finished' };
 
@@ -46,6 +61,7 @@ function titleInitials(title: string): string {
 
 function StatusPill({ entry }: { entry: DistanceChallengeEntry }) {
   if (entry.displayStatus === 'cancelled') return <span style={{ background: '#f3f4f6', color: '#6b7280', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>Cancelled</span>;
+  if (entry.upcoming) return <span style={{ background: '#e0e7ff', color: '#3730a3', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>📅 Starts {fmtShortDate(entry.challenge.startDate!)}</span>;
   if (entry.displayStatus === 'ended') return <span style={{ background: entry.percentage >= 100 ? '#dcfce7' : '#f3f4f6', color: entry.percentage >= 100 ? '#166534' : '#6b7280', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>{entry.percentage >= 100 ? '🏁 Goal hit!' : '🏁 Ended'}</span>;
   return entry.onPace
     ? <span style={{ background: '#dcfce7', color: '#166534', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>✅ On pace</span>
@@ -59,7 +75,7 @@ function DistanceChallengeCard({ entry, basePath }: { entry: DistanceChallengeEn
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #f3f4f6', padding: 16, marginBottom: 10, cursor: 'pointer' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#1f2937' }}>{challenge.title}</div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#1f2937' }}>{challenge.title}<FeatureBadge challenge={challenge} /></div>
             <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
               {CHALLENGE_CATEGORY_LABELS[challenge.category!]} · {CHALLENGE_PERIOD_LABELS[challenge.period!]} · 👥 {entry.participantCount} · {challenge.visibility === 'open' ? '🌍 Open' : '🔒 Invite-only'}
             </div>
@@ -71,8 +87,35 @@ function DistanceChallengeCard({ entry, basePath }: { entry: DistanceChallengeEn
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6b7280' }}>
           <span><strong style={{ color: '#1f2937' }}>{entry.progressKm}km</strong> / {challenge.goalKm}km — {entry.percentage}%</span>
-          {entry.displayStatus === 'active' && <span>{entry.daysRemaining}d left</span>}
+          {entry.displayStatus === 'active' && !entry.upcoming && <span>{entry.daysRemaining}d left</span>}
         </div>
+      </div>
+    </Link>
+  );
+}
+
+function HistoryCard({ entry, basePath }: { entry: HistoryEntry; basePath: string }) {
+  const { challenge, podium } = entry;
+  return (
+    <Link href={`${basePath}/${challenge.id}`} style={{ textDecoration: 'none' }}>
+      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #f3f4f6', padding: 16, marginBottom: 10, cursor: 'pointer' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#1f2937' }}>{challenge.title}<FeatureBadge challenge={challenge} /></div>
+            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+              {fmtShortDate(challenge.startDate!)} – {fmtShortDate(challenge.endDate!)} · Goal {challenge.goalKm}km · 👥 {entry.participantCount} · by {challenge.ownerName}
+            </div>
+          </div>
+          {entry.myRank && <span style={{ background: '#f0fdf4', color: '#166534', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>You: #{entry.myRank} · {entry.myKm}km</span>}
+        </div>
+        {podium.length === 0
+          ? <div style={{ fontSize: 12, color: '#9ca3af' }}>No distance was logged — no winner.</div>
+          : podium.map((e, i) => (
+            <div key={e.memberId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '3px 0', color: '#374151' }}>
+              <span>{MEDALS[i]} <strong>{e.memberName}</strong></span>
+              <span style={{ color: '#6b7280' }}>{e.progressKm}km · {e.percentage}%</span>
+            </div>
+          ))}
       </div>
     </Link>
   );
@@ -282,7 +325,10 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [challengeKind, setChallengeKind] = useState<'distance' | 'trivia'>('distance');
-  const [form, setForm] = useState({ title: '', category: 'run_walk' as ChallengeCategory, period: 'monthly' as ChallengePeriod, goalKm: '', visibility: 'open' as ChallengeVisibility });
+  const emptyForm = () => ({ title: '', category: 'run_walk' as ChallengeCategory, period: 'monthly' as ChallengePeriod, goalKm: '', visibility: 'open' as ChallengeVisibility, startDate: localToday(), description: '', requestFeature: false });
+  const [form, setForm] = useState(emptyForm);
+  const [view, setView] = useState<'current' | 'past'>('current');
+  const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [triviaForm, setTriviaForm] = useState({ posterImageUrl: '', visibility: 'public' as TriviaVisibility, scheduledAt: '', timerSeconds: '30' });
   const [triviaTeams, setTriviaTeams] = useState<DraftTeam[]>([{ key: draftKey(), name: 'Team 1', members: [] }, { key: draftKey(), name: 'Team 2', members: [] }]);
   const [triviaQuestions, setTriviaQuestions] = useState<DraftQuestion[]>([]);
@@ -297,6 +343,11 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
   }
 
   useEffect(() => { fetchData(); }, []);
+  function showView(next: 'current' | 'past') {
+    setView(next);
+    if (next !== 'past' || history) return;
+    fetch('/api/member/challenges/history', actorInit(asAdmin)).then(r => r.json()).then(d => setHistory(d.history || [])).catch(() => setHistory([]));
+  }
   useEffect(() => { fetch('/api/member/peers', actorInit(asAdmin)).then(r => r.json()).then(d => setPeers(d.peers || [])).catch(() => {}); }, [asAdmin]);
 
   function resetTriviaForm() {
@@ -310,13 +361,22 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
     if (!form.title.trim()) { setError('Give your challenge a name'); return; }
     const goal = parseFloat(form.goalKm);
     if (!goal || goal <= 0) { setError('Enter a goal distance'); return; }
+    if (form.requestFeature && !form.description.trim()) { setError('Add a description: it is what people see on the main page'); return; }
     setCreating(true);
     try {
-      const res = await fetch('/api/member/challenges', actorInit(asAdmin, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'distance', ...form, goalKm: goal }) }));
-      const data = await res.json();
+      const send = (override: boolean) => fetch('/api/member/challenges', actorInit(asAdmin, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'distance', ...form, goalKm: goal, override }) }));
+      let res = await send(false);
+      let data = await res.json();
+      // Admins featuring past the limit get asked once, then the same request goes through with an override.
+      if (res.status === 409 && data.code === 'cap_reached') {
+        if (!confirm(`${data.current} challenges are already featured (limit ${data.max}). Feature this one anyway?`)) return;
+        res = await send(true); data = await res.json();
+      }
       if (!res.ok) { setError(data.error || 'Failed to create challenge'); return; }
-      toast.success(form.visibility === 'open' ? 'Challenge created! Anyone can join, and you can invite people from the challenge page 🎯' : 'Challenge created! Invite people from the challenge page 🎯');
-      setForm({ title: '', category: 'run_walk', period: 'monthly', goalKm: '', visibility: 'open' });
+      toast.success(form.requestFeature
+        ? (asAdmin ? 'Challenge created and featured on the main page ⭐' : 'Challenge created! An admin will review your request to feature it ⭐')
+        : form.visibility === 'open' ? 'Challenge created! Anyone can join, and you can invite people from the challenge page 🎯' : 'Challenge created! Invite people from the challenge page 🎯');
+      setForm(emptyForm());
       setShowForm(false);
       fetchData();
     } catch { setError('Connection error'); } finally { setCreating(false); }
@@ -347,7 +407,7 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to create trivia'); return; }
       toast.success('Trivia created! 🏛️ Open it to start the game');
-      setForm({ title: '', category: 'run_walk', period: 'monthly', goalKm: '', visibility: 'open' });
+      setForm(emptyForm());
       resetTriviaForm();
       setShowForm(false);
       fetchData();
@@ -426,6 +486,13 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
                 </div>
               </div>
               <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Start Date *</label>
+                <input type="date" value={form.startDate} min={localToday()} onChange={e => setForm({ ...form, startDate: e.target.value || localToday() })} style={inp} />
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 5 }}>
+                  {form.startDate > localToday() ? 'People can join before it starts. Only activities from the start date count.' : 'Starts today.'}
+                </div>
+              </div>
+              <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Goal Distance — km *</label>
                 <input type="number" min="0" step="0.1" value={form.goalKm} onChange={e => setForm({ ...form, goalKm: e.target.value })} placeholder="e.g. 120" style={inp} />
                 {weeklyPace && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 5 }}>≈ {weeklyPace}km/week to stay on pace</div>}
@@ -434,11 +501,27 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Who can join?</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button type="button" onClick={() => setForm({ ...form, visibility: 'open' })} style={segBtn(form.visibility === 'open')}>🌍 Anyone can join</button>
-                  <button type="button" onClick={() => setForm({ ...form, visibility: 'invite' })} style={segBtn(form.visibility === 'invite')}>🔒 Invite-only</button>
+                  <button type="button" disabled={form.requestFeature} onClick={() => setForm({ ...form, visibility: 'invite' })} style={{ ...segBtn(form.visibility === 'invite'), ...(form.requestFeature && { opacity: 0.45, cursor: 'not-allowed' as const }) }}>🔒 Invite-only</button>
                 </div>
                 <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 5 }}>
-                  {form.visibility === 'open' ? 'Listed for everyone to discover and join. Members who join can invite others too.' : 'Hidden from others. Only people you invite can join.'}
+                  {form.requestFeature ? 'Featured challenges are always open so anyone on the main page can join.' : form.visibility === 'open' ? 'Listed for everyone to discover and join. Members who join can invite others too.' : 'Hidden from others. Only people you invite can join.'}
                 </div>
+              </div>
+              <div style={{ marginBottom: 14, background: form.requestFeature ? '#fffbeb' : '#fafaf9', border: `1px solid ${form.requestFeature ? '#fde68a' : '#f3f4f6'}`, borderRadius: 12, padding: 14 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#374151' }}>
+                  <input type="checkbox" checked={form.requestFeature} onChange={e => setForm({ ...form, requestFeature: e.target.checked, ...(e.target.checked && { visibility: 'open' as ChallengeVisibility }) })} style={{ width: 16, height: 16, accentColor: '#1a7a4a' }} />
+                  ⭐ {asAdmin ? 'Feature on the main page now' : 'Request to feature on the main page'}
+                </label>
+                <div style={{ fontSize: 11, color: '#9ca3af', margin: '4px 0 0 26px' }}>
+                  {asAdmin ? 'Shows on the main page and in the chatbot right away.' : 'An admin reviews requests. Once featured, it shows on the main page and in the chatbot.'}
+                </div>
+                {form.requestFeature && (
+                  <div style={{ marginTop: 12 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Description *</label>
+                    <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} maxLength={CHALLENGE_DESCRIPTION_MAX} rows={3} placeholder="What's the challenge about, who is it for, and why should people join?" style={{ ...inp, resize: 'vertical' as const }} />
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, textAlign: 'right' }}>{form.description.length}/{CHALLENGE_DESCRIPTION_MAX}</div>
+                  </div>
+                )}
               </div>
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#92400e', marginBottom: 14 }}>
                 ⚠️ Only activities logged <strong>with a distance (km)</strong> and tagged to this challenge when logging count. Rank is by total distance; points (+1 for group activities) are shown alongside.
@@ -498,6 +581,19 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
         </div>
       )}
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+        {([['current', '🎯 Current'], ['past', '🏁 Past']] as const).map(([key, label]) => (
+          <button key={key} onClick={() => showView(key)} style={{ ...segBtn(view === key), flex: '0 1 140px', padding: '8px 10px' }}>{label}</button>
+        ))}
+      </div>
+
+      {view === 'past' ? (
+        history === null ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af', fontSize: 13 }}>Loading past challenges…</div>
+        ) : history.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af', fontSize: 13, background: 'white', borderRadius: 14, border: '1px solid #f3f4f6' }}>No finished challenges yet.</div>
+        ) : history.map(h => <HistoryCard key={h.challenge.id} entry={h} basePath={basePath} />)
+      ) : (<>
       {invites.length > 0 && (
         <div style={{ marginBottom: 24 }}>
           <h3 style={{ fontSize: 14, fontWeight: 800, color: '#374151', margin: '0 0 10px' }}>📩 Invitations ({invites.length})</h3>
@@ -548,6 +644,7 @@ export default function ChallengesHub({ basePath, asAdmin, legacyMethaliHref = '
           ))}
         </div>
       )}
+      </>)}
     </div>
   );
 }
