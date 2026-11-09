@@ -403,6 +403,13 @@ export async function getFeaturedChallenges(): Promise<Challenge[]> {
     .sort((a, b) => (a.featuredAt ?? a.createdAt).localeCompare(b.featuredAt ?? b.createdAt));
 }
 
+// How many challenges are featured right now vs the admin's limit, not counting `excludeId` itself.
+export async function getFeatureCapacity(excludeId?: string): Promise<{ current: number; max: number; full: boolean }> {
+  const [featured, settings] = await Promise.all([getFeaturedChallenges(), getAppSettings()]);
+  const current = featured.filter(c => c.id !== excludeId).length;
+  return { current, max: settings.maxFeaturedChallenges, full: current >= settings.maxFeaturedChallenges };
+}
+
 // Ended (not cancelled) distance challenges, most recently finished first.
 export async function getEndedChallenges(): Promise<Challenge[]> {
   return (await getAllChallenges())

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getActor } from '@/lib/actor';
-import { getMember, getMemberChallenges, saveChallenge, saveChallengeParticipant, getChallengeParticipant, getChallengeParticipants, computeChallengeProgress, computeChallengePace, getOpenChallenges } from '@/lib/data';
-import { Challenge, ChallengeParticipant, ChallengeCategory, ChallengePeriod, ChallengeVisibility, computeChallengeEndDate, getChallengeDisplayStatus } from '@/types';
+import { getMember, getMemberChallenges, saveChallenge, saveChallengeParticipant, getChallengeParticipant, getChallengeParticipants, computeChallengeProgress, computeChallengePace, getOpenChallenges, getFeatureCapacity } from '@/lib/data';
+import { Challenge, ChallengeParticipant, ChallengeCategory, ChallengePeriod, ChallengeVisibility, computeChallengeEndDate, getChallengeDisplayStatus, isChallengeUpcoming, CHALLENGE_DESCRIPTION_MAX } from '@/types';
 import {
   buildTriviaGame, saveTriviaGame, getTriviaGame, isScheduledInFuture,
   MIN_TEAMS, MAX_TEAMS, MIN_TIMER_SECONDS, MAX_TIMER_SECONDS, DEFAULT_TIMER_SECONDS,
@@ -12,6 +12,8 @@ import {
 const VALID_CATEGORIES: ChallengeCategory[] = ['run_walk', 'cycling'];
 const VALID_PERIODS: ChallengePeriod[] = ['weekly', 'monthly'];
 const VALID_PHASES = new Set<TriviaQuestionPhase>(['test', 'main', 'tiebreak']);
+const MAX_START_DAYS_AHEAD = 180;
+
 
 export async function GET() {
   const session = await getActor();
@@ -48,7 +50,7 @@ export async function GET() {
       const pace = computeChallengePace(challenge, progressKm);
       const participants = await getChallengeParticipants(challenge.id);
       const participantCount = participants.filter(p => p.status === 'accepted').length;
-      const entry = { challenge, kind: 'distance', progressKm, ...pace, participantCount, displayStatus: getChallengeDisplayStatus(challenge) };
+      const entry = { challenge, kind: 'distance', progressKm, ...pace, participantCount, displayStatus: getChallengeDisplayStatus(challenge), upcoming: isChallengeUpcoming(challenge) };
 
       if (challenge.ownerId === session.memberId) owned.push(entry);
       else joined.push(entry);
@@ -88,14 +90,32 @@ export async function POST(req: NextRequest) {
     const goal = Number(goalKm);
     if (!Number.isFinite(goal) || goal <= 0 || goal > 2000) return NextResponse.json({ error: 'Goal must be between 0 and 2000km' }, { status: 400 });
 
-    const startDate = new Date().toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const startDate = typeof body.startDate === 'string' && body.startDate ? body.startDate : today;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || Number.isNaN(new Date(startDate + 'T12:00:00Z').getTime())) return NextResponse.json({ error: 'Invalid start date' }, { status: 400 });
+    if (startDate < today) return NextResponse.json({ error: 'Start date cannot be in the past' }, { status: 400 });
+    const latestStart = new Date(); latestStart.setUTCDate(latestStart.getUTCDate() + MAX_START_DAYS_AHEAD);
+    if (startDate > latestStart.toISOString().slice(0, 10)) return NextResponse.json({ error: `Start date must be within ${MAX_START_DAYS_AHEAD} days` }, { status: 400 });
     const endDate = computeChallengeEndDate(startDate, period);
     const now = new Date().toISOString();
+
+    const description = typeof body.description === 'string' ? body.description.trim() : '';
+    if (description.length > CHALLENGE_DESCRIPTION_MAX) return NextResponse.json({ error: `Description is too long (max ${CHALLENGE_DESCRIPTION_MAX} characters)` }, { status: 400 });
+    // Members ask for a main-page spot; only an admin can put one there straight away.
+    const wantsFeature = body.requestFeature === true;
+    if (wantsFeature && !description) return NextResponse.json({ error: 'Add a description so people know what the challenge is about' }, { status: 400 });
+    if (wantsFeature && session.isAdmin && body.override !== true) {
+      const cap = await getFeatureCapacity();
+      if (cap.full) return NextResponse.json({ error: `${cap.current} challenges are already featured (limit ${cap.max})`, code: 'cap_reached', ...cap }, { status: 409 });
+    }
 
     const challenge: Challenge = {
       id: uuidv4(), ownerId: member.id, ownerName: member.name, kind: 'distance',
       title: trimmedTitle, category, period, goalKm: Math.round(goal * 10) / 10,
-      visibility, taggedOnly: true,
+      // A featured challenge has to be joinable by whoever sees it on the main page.
+      visibility: wantsFeature ? 'open' : visibility, taggedOnly: true,
+      ...(description && { description }),
+      ...(wantsFeature && (session.isAdmin ? { featureStatus: 'featured' as const, featuredAt: now } : { featureStatus: 'requested' as const })),
       startDate, endDate, status: 'active', createdAt: now,
     };
     const ownerParticipant: ChallengeParticipant = {
