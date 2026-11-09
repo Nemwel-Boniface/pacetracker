@@ -19,3 +19,13 @@ export async function getActor(): Promise<Actor | null> {
   const session = await getMemberSession();
   return session ? { memberId: session.memberId, isAdmin: false } : null;
 }
+
+// For public pages (main page card, chatbot) that can't send the admin header: whoever is signed in,
+// preferring the member session so a member's own view always wins over a leftover admin cookie.
+export async function getViewer(): Promise<Actor | null> {
+  const session = await getMemberSession();
+  if (session) return { memberId: session.memberId, isAdmin: false };
+  if (!await getAdminSession()) return null;
+  await ensureAdminMember();
+  return { memberId: ADMIN_MEMBER_ID, isAdmin: true };
+}
