@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getActor } from '@/lib/actor';
 import { getChallenge, getChallengeParticipant, saveChallengeParticipant, getMember } from '@/lib/data';
-import { ChallengeParticipant, getChallengeDisplayStatus } from '@/types';
+import { ChallengeParticipant, getChallengeDisplayStatus, isChallengeFacilitator } from '@/types';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -13,8 +13,8 @@ export async function POST(req: NextRequest, { params }: RouteCtx) {
     const challenge = await getChallenge(id);
     if (!challenge) return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
     if (challenge.kind === 'trivia') return NextResponse.json({ error: 'Trivia challenges assign teams directly — see the trivia control panel' }, { status: 400 });
-    // Owners (and admins) can always invite; on open challenges any joined participant can bring friends along.
-    if (challenge.ownerId !== session.memberId && !session.isAdmin) {
+    // Owners, co-facilitators and admins can always invite; on open challenges any joined participant can bring friends along.
+    if (!isChallengeFacilitator(challenge, session.memberId) && !session.isAdmin) {
       const me = await getChallengeParticipant(id, session.memberId);
       if (challenge.visibility !== 'open' || me?.status !== 'accepted') return NextResponse.json({ error: 'Only the owner can invite members to this challenge' }, { status: 403 });
     }
