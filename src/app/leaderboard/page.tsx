@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { MemberStats, Winner, PrizeCategory, CountryConfig, TIER_CONFIG, PointTier, getCountryFlag } from '@/types';
 import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
 import Link from 'next/link';
+import FeaturedChallenges from '@/components/challenges/FeaturedChallenges';
 
 const PAGE_SIZE = 10;
 const MARATHON_DATE = new Date('2026-07-26T07:00:00+03:00');
@@ -127,6 +128,8 @@ export default function LeaderboardPage() {
             </div>
           </div>
         )}
+
+        <FeaturedChallenges />
 
         {winners.length > 0 && (
           <div style={{ background: 'linear-gradient(135deg,#fef9c3,#fde68a)', border: '1px solid #fcd34d', borderRadius: 16, padding: 20, marginBottom: 20 }}>

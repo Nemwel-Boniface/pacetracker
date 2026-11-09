@@ -9,6 +9,13 @@ const btn = (bg: string, disabled = false) => ({ width: '100%', padding: '12px',
 
 type Mode = 'login' | 'signup' | 'forgot';
 
+// `?next=/member/...` sends people back where they came from (e.g. a featured challenge's Join).
+// Only same-site member paths are honoured so the param can't be used as an open redirect.
+function nextPath(): string {
+  const next = new URLSearchParams(window.location.search).get('next');
+  return next && next.startsWith('/member') && !next.startsWith('//') ? next : '/member';
+}
+
 export default function AuthenticatePage() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('login');
@@ -48,7 +55,7 @@ export default function AuthenticatePage() {
         try { localStorage.setItem('pt_member_creds', JSON.stringify(login)); } catch { /* ignore */ }
         toast.success('Welcome back! 👋');
       }
-      router.push(data.requiresPasswordChange ? '/member/change-password' : '/member');
+      router.push(data.requiresPasswordChange ? '/member/change-password' : nextPath());
     } catch { setError('Connection error'); } finally { setLoading(false); }
   }
 
@@ -63,7 +70,7 @@ export default function AuthenticatePage() {
       if (!res.ok) { setError(data.error || 'Registration failed'); return; }
       try { localStorage.setItem('pt_member_creds', JSON.stringify({ email: signup.email, password: signup.password })); } catch { /* ignore */ }
       toast.success('Account created! Welcome to PaceTracker 🏃');
-      router.push('/member');
+      router.push(nextPath());
     } catch { setError('Connection error'); } finally { setLoading(false); }
   }
 
