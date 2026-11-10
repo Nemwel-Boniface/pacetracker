@@ -1,13 +1,15 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { CountryConfig } from '@/types';
+import { CountryConfig, ADMIN_CONTACT } from '@/types';
 import { toast } from 'sonner';
 
 const inp = { width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' };
 const btn = (bg: string, disabled = false) => ({ width: '100%', padding: '12px', borderRadius: 10, background: disabled ? '#9ca3af' : bg, color: 'white', fontWeight: 700, fontSize: 14, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer' });
 
 type Mode = 'login' | 'signup' | 'forgot';
+// Why sign-up stopped instead of creating an account that may duplicate someone's existing one.
+type SignupConflict = { code: 'invited' | 'possible_duplicate' | 'email_taken'; maskedEmail?: string; maskedEmails?: string[] };
 
 // `?next=/member/...` sends people back where they came from (e.g. a featured challenge's Join).
 // Only same-site member paths are honoured so the param can't be used as an open redirect.
@@ -26,6 +28,7 @@ export default function AuthenticatePage() {
   const [signup, setSignup] = useState({ name: '', email: '', password: '', confirm: '', country: '' });
   const [forgotEmail, setForgotEmail] = useState('');
   const [resetToken, setResetToken] = useState('');
+  const [conflict, setConflict] = useState<SignupConflict | null>(null);
 
   useEffect(() => {
     try {
@@ -43,7 +46,7 @@ export default function AuthenticatePage() {
     }).catch(() => {});
   }, []);
 
-  function switchMode(m: Mode) { setMode(m); setError(''); setResetToken(''); }
+  function switchMode(m: Mode) { setMode(m); setError(''); setResetToken(''); setConflict(null); }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault(); setError(''); setLoading(true);
@@ -59,14 +62,15 @@ export default function AuthenticatePage() {
     } catch { setError('Connection error'); } finally { setLoading(false); }
   }
 
-  async function handleSignup(e: React.FormEvent) {
-    e.preventDefault(); setError('');
+  async function handleSignup(e: React.FormEvent | null, confirmDifferentPerson = false) {
+    e?.preventDefault(); setError(''); setConflict(null);
     if (signup.password !== signup.confirm) { setError('Passwords do not match'); return; }
     if (signup.password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/member/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: signup.name, email: signup.email, password: signup.password, country: signup.country }) });
+      const res = await fetch('/api/auth/member/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: signup.name, email: signup.email, password: signup.password, country: signup.country, confirmDifferentPerson }) });
       const data = await res.json();
+      if (res.status === 409 && data.code) { setConflict({ code: data.code, maskedEmail: data.maskedEmail, maskedEmails: data.maskedEmails }); return; }
       if (!res.ok) { setError(data.error || 'Registration failed'); return; }
       try { localStorage.setItem('pt_member_creds', JSON.stringify({ email: signup.email, password: signup.password })); } catch { /* ignore */ }
       toast.success('Account created! Welcome to PaceTracker 🏃');
@@ -129,11 +133,11 @@ export default function AuthenticatePage() {
             <form onSubmit={handleSignup}>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Full Name</label>
-                <input value={signup.name} onChange={e => setSignup({ ...signup, name: e.target.value })} placeholder="Jane Wanjiku" required style={inp} />
+                <input value={signup.name} onChange={e => { setSignup({ ...signup, name: e.target.value }); setConflict(null); }} placeholder="Jane Wanjiku" required style={inp} />
               </div>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Email</label>
-                <input type="email" value={signup.email} onChange={e => setSignup({ ...signup, email: e.target.value })} placeholder="you@example.com" required style={inp} />
+                <input type="email" value={signup.email} onChange={e => { setSignup({ ...signup, email: e.target.value }); setConflict(null); }} placeholder="you@example.com" required style={inp} />
               </div>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Country</label>
@@ -150,7 +154,8 @@ export default function AuthenticatePage() {
                 <input type="password" value={signup.confirm} onChange={e => setSignup({ ...signup, confirm: e.target.value })} placeholder="••••••••" required style={inp} />
               </div>
               {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 16 }}>{error}</div>}
-              <button type="submit" disabled={loading} style={btn('#1a7a4a', loading)}>{loading ? 'Creating account…' : 'Create Account'}</button>
+              {conflict && <ConflictNotice conflict={conflict} name={signup.name.trim()} loading={loading} onSignIn={() => switchMode('login')} onDifferentPerson={() => handleSignup(null, true)} />}
+              {!conflict && <button type="submit" disabled={loading} style={btn('#1a7a4a', loading)}>{loading ? 'Creating account…' : 'Create Account'}</button>}
             </form>
           )}
 
@@ -196,5 +201,48 @@ export default function AuthenticatePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ConflictNotice({ conflict, name, loading, onSignIn, onDifferentPerson }: {
+  conflict: SignupConflict; name: string; loading: boolean; onSignIn: () => void; onDifferentPerson: () => void;
+}) {
+  const box = { background: '#fff7ed', border: '1px solid #fed7aa', color: '#7c2d12', padding: '14px 16px', borderRadius: 10, fontSize: 13, lineHeight: 1.5, marginBottom: 14 };
+  const contact = (
+    <p style={{ margin: '10px 0 0' }}>
+      Not sure? Contact the admin <strong>{ADMIN_CONTACT.name}</strong> at{' '}
+      <a href={ADMIN_CONTACT.whatsapp} target="_blank" rel="noopener noreferrer" style={{ color: '#1a7a4a', fontWeight: 700 }}>{ADMIN_CONTACT.phone}</a> (WhatsApp).
+    </p>
+  );
+  return (
+    <>
+      <div style={box}>
+        {conflict.code === 'invited' && (
+          <>
+            <strong style={{ fontSize: 14 }}>👋 You&apos;ve already been invited!</strong>
+            <p style={{ margin: '6px 0 0' }}>An account is already waiting for you under <strong>{conflict.maskedEmail}</strong>. Please don&apos;t create a new one. Sign in with that email and the temporary password you were given, then you&apos;ll set your own password.</p>
+          </>
+        )}
+        {conflict.code === 'possible_duplicate' && (
+          <>
+            <strong style={{ fontSize: 14 }}>🤔 Do you already have an account?</strong>
+            <p style={{ margin: '6px 0 0' }}>There&apos;s already an account for <strong>{name}</strong> under <strong>{conflict.maskedEmails?.join(', ')}</strong>. If that&apos;s you, sign in instead (use Forgot password if needed), so your points stay in one place.</p>
+          </>
+        )}
+        {conflict.code === 'email_taken' && (
+          <>
+            <strong style={{ fontSize: 14 }}>📧 This email already has an account</strong>
+            <p style={{ margin: '6px 0 0' }}>Sign in instead, or use Forgot password if you can&apos;t remember it.</p>
+          </>
+        )}
+        {contact}
+      </div>
+      <button type="button" onClick={onSignIn} style={btn('#1a7a4a')}>🔑 Go to Sign In</button>
+      {conflict.code === 'possible_duplicate' && (
+        <button type="button" onClick={onDifferentPerson} disabled={loading} style={{ width: '100%', marginTop: 8, padding: '10px', borderRadius: 10, background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 13, border: '1px solid #e5e7eb', cursor: loading ? 'not-allowed' : 'pointer' }}>
+          {loading ? 'Creating account…' : "That's not me, create my account"}
+        </button>
+      )}
+    </>
   );
 }
