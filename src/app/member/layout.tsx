@@ -53,6 +53,7 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
     { href: '/member/challenges', label: '🏁 Challenges' },
     { href: '/member/log', label: '➕ Log Activity' },
     { href: '/member/feedback', label: '💬 Feedback' },
+    { href: '/member/yef', label: '🎄 YEF 2026' },
     { href: '/member/how-it-works', label: '📖 How It Works' },
   ];
 
