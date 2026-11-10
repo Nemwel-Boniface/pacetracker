@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { getRedis, KEYS } from './redis';
 import { Member, ActivityLog, PrizeCategory, Winner, Feedback, CountryConfig, getTier } from '@/types';
+import { getYefPeople, getSantaState, getYefAwards, getYefVotes, getYefSettings } from './yef';
 
 async function fetchAll<T>(idKey: string, itemKey: (id: string) => string): Promise<T[]> {
   const r = getRedis();
@@ -116,6 +117,24 @@ export async function generateExportBuffer(): Promise<Buffer> {
     Object.entries(idx).map(([Email, MemberID]) => ({ Email, MemberID }))
   ), 'EmailIndex');
 
+  // ── YEF 2026 (Secret Santa + Awards) ──────────────────────────────────────
+  const [yefPeople, santa, yefAwards, yefSettings] = await Promise.all([getYefPeople(), getSantaState(), getYefAwards(), getYefSettings()]);
+  const yefVotes = await Promise.all(yefAwards.map(async a => ({ award: a, votes: await getYefVotes(a.id) })));
+  const yefName = new Map(yefPeople.map(p => [p.id, p.name]));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+    yefPeople.length ? yefPeople.map(p => ({ ID: p.id, Name: p.name, Department: p.department, Likes: p.likes ?? '', ClaimedBy: p.claimedBy ?? '', ClaimedByName: p.claimedByName ?? '', AddedAt: p.addedAt })) : [{ ID: '(none)' }]
+  ), 'YEF People');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+    santa.groups.length ? santa.groups.map((g, i) => ({ Group: i + 1, People: g.map(id => yefName.get(id) ?? id).join(g.length === 2 ? ' <-> ' : ' -> '), IDs: JSON.stringify(g), Published: santa.published })) : [{ Group: '(none)', Published: santa.published }]
+  ), 'YEF Santa');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+    yefAwards.length ? yefAwards.map(a => ({ ID: a.id, Title: a.title, Description: a.description ?? '', Status: a.status, NoSameDepartment: !!a.noSameDepartment, SuggestedBy: a.suggestedByName ?? '', CreatedAt: a.createdAt })) : [{ ID: '(none)' }]
+  ), 'YEF Awards');
+  const voteRows = yefVotes.flatMap(({ award, votes }) => Object.entries(votes).map(([MemberID, PersonID]) => ({ AwardID: award.id, Award: award.title, MemberID, PersonID, Nominee: yefName.get(PersonID) ?? '' })));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+    voteRows.length ? voteRows : [{ AwardID: '(none)', VotingOpen: yefSettings.votingOpen, ResultsRevealed: yefSettings.resultsRevealed }]
+  ), 'YEF Votes');
+
   // ── Restore Guide ─────────────────────────────────────────────────────────
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
     ['PaceTracker — Full Data Export'],
@@ -141,6 +160,10 @@ export async function generateExportBuffer(): Promise<Buffer> {
     ['  Countries', '→ SET pt:country:{name.toLowerCase().replace(/ /g,"_")} <row as JSON>  +  SADD pt:countries {slug}'],
     ['  Settings', '→ SET pt:settings <rebuild JSON from Key/Value pairs>'],
     ['  EmailIndex', '→ HSET pt:email:index {Email} {MemberID}  (for each row)'],
+    ['  YEF People', '→ HSET pt:yef:people {ID} <row as JSON>'],
+    ['  YEF Santa', '→ SET pt:yef:santa {"published":<Published>,"groups":[<IDs of each row>]}'],
+    ['  YEF Awards', '→ HSET pt:yef:awards {ID} <row as JSON>'],
+    ['  YEF Votes', '→ HSET pt:yef:votes:{AwardID} {MemberID} {PersonID}  (+ SET pt:yef:settings {"votingOpen":…,"resultsRevealed":…})'],
     [''],
     ['Step 3', 'Redeploy your app — it will connect to the new DB automatically'],
     ['Step 4', 'Verify data by visiting /admin-move2026/dashboard'],
