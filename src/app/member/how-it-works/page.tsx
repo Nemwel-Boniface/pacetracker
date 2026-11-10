@@ -1,12 +1,15 @@
 import { TIER_CONFIG, ACTIVITY_POINTS, ACTIVITY_LABELS, PointTier } from '@/types';
+import LogGuide from '@/components/LogGuide';
 
 export default function MemberHowItWorksPage() {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1f2937', margin: '0 0 4px' }}>How Points Work</h2>
-        <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>Everything you need to know about #Move2026 scoring</p>
+        <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1f2937', margin: '0 0 4px' }}>How It Works</h2>
+        <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>How to log, how points work, and how to count activities toward a challenge</p>
       </div>
+
+      <LogGuide />
 
       <div style={{ background: 'white', borderRadius: 16, padding: 24, border: '1px solid #f3f4f6', marginBottom: 16 }}>
         <h3 style={{ fontWeight: 900, marginBottom: 12, fontSize: 16 }}>The Philosophy</h3>
