@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   PrizeCategory, Winner,
   ActivityType, ACTIVITY_LABELS, ACTIVITY_CATEGORY_MAP, ACTIVITY_POINTS,
-  CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_CATEGORY_ACTIVITY_TYPES, ChallengeCategory,
+  CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_CATEGORY_ACTIVITY_TYPES, ChallengeCategory, challengeInviteMessage,
 } from '@/types';
 import { actorInit } from '@/lib/actorClient';
 import { FeaturedChallenge, FeaturedViewer, challengeHref, featuredFacilitators } from '@/components/challenges/FeaturedChallenges';
@@ -349,6 +349,22 @@ export default function ChatBot() {
       setThinking(false);
       say("Hmm, couldn't connect right now. Please try again! 🦏");
       setInputMode('challenge_actions');
+    }
+  }
+
+  async function copyInviteMessage() {
+    if (!activeChal) return;
+    const c = activeChal;
+    echo('📋 Copy invite message');
+    const text = challengeInviteMessage({
+      id: c.id, title: c.title, description: c.description, goalKm: c.goalKm, category: c.category,
+      startDate: c.startDate, endDate: c.endDate, facilitators: featuredFacilitators(c),
+    }, window.location.origin);
+    try {
+      await navigator.clipboard.writeText(text);
+      say(`📋 Copied! Paste it in Slack or WhatsApp to bring people into **${c.title}**. It has the dates, the goal, a link to join and how to tag activities. 🦏`);
+    } catch {
+      say("Hmm, your browser blocked copying. Try again, or open the challenge page and use **📋 Copy invite message** there. 🦏");
     }
   }
 
@@ -951,6 +967,9 @@ export default function ChatBot() {
                   )}
                   {activeChal.canInvite && (
                     <button onClick={startInvite} style={{ padding: '9px', borderRadius: 10, background: 'white', color: '#145c38', fontWeight: 700, fontSize: 13, border: '1.5px solid #1a7a4a', cursor: 'pointer' }}>📩 Invite people</button>
+                  )}
+                  {activeChal.canInvite && (
+                    <button onClick={copyInviteMessage} style={{ padding: '9px', borderRadius: 10, background: 'white', color: '#145c38', fontWeight: 700, fontSize: 13, border: '1.5px solid #1a7a4a', cursor: 'pointer' }}>📋 Copy invite message</button>
                   )}
                   <div style={{ display: 'flex', gap: 6 }}>
                     {featViewer && <a href={challengeHref(activeChal.id, featViewer)} style={{ flex: 1, padding: '8px', borderRadius: 10, background: 'white', color: '#374151', fontWeight: 600, fontSize: 12, border: '1.5px solid #e5e7eb', textAlign: 'center', textDecoration: 'none' }}>🔗 Open page</a>}
