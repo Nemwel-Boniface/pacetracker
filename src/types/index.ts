@@ -143,6 +143,15 @@ export function facilitatorNames(c: Challenge): string {
   const names = [c.ownerName, ...(c.coFacilitators ?? []).map(f => f.name)];
   return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
 }
+// Who members contact when they're unsure which account is theirs (shown on sign-up conflicts).
+export const ADMIN_CONTACT = { name: 'Nemwel Rhino', phone: '+254727475518', whatsapp: 'https://wa.me/254727475518' };
+
+// "j***@edencare.com": enough for someone to recognise their own address without exposing it.
+export function maskEmail(email: string): string {
+  const [user, domain] = email.split('@');
+  return domain ? `${user.slice(0, 1)}***@${domain}` : '***';
+}
+
 // Ready-to-paste Slack/WhatsApp text for inviting people to a distance challenge (*bold* works in both).
 export function challengeInviteMessage(c: {
   id: string; title: string; description?: string; goalKm: number; category: ChallengeCategory;
