@@ -134,8 +134,8 @@ export default function MemberYefPage() {
         <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 10px' }}>Hobbies, favourite snacks, colours, books, anything that gives your partner a gift idea. Everyone can see this on the YEF page.</p>
         <textarea value={likes} onChange={e => setLikes(e.target.value)} maxLength={YEF_LIKES_MAX} rows={4} placeholder="e.g. Coffee, hiking, sci-fi books, anything green 🌿" style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-          <span style={{ fontSize: 11, color: '#9ca3af' }}>{likes.length}/{YEF_LIKES_MAX}</span>
           <button onClick={saveLikes} disabled={busy || likes.trim() === (me.likes ?? '')} style={btn(busy || likes.trim() === (me.likes ?? ''))}>Save likes</button>
+          <span style={{ fontSize: 11, color: '#9ca3af' }}>{likes.length}/{YEF_LIKES_MAX}</span>
         </div>
       </div>
 
