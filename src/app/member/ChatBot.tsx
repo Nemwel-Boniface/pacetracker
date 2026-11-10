@@ -43,6 +43,7 @@ type InputMode =
 const FAQS = [
   { id: 'what_is',      label: '🦏 What is PaceTracker?' },
   { id: 'log_activity', label: '➕ How do I log an activity?' },
+  { id: 'log_challenge', label: '🎯 How do I log for a challenge?' },
   { id: 'points',       label: '⭐ How do points work?' },
   { id: 'tiers',        label: '🏅 What are the tiers?' },
   { id: 'gifts',        label: '🎁 What gifts are there?' },
@@ -180,7 +181,9 @@ export default function ChatBot() {
       case 'what_is':
         return "PaceTracker is Eden Care's **#Move2026** challenge — an 8-week movement challenge to get everyone active! 🏃‍♂️\n\nYou log activities like runs, walks, gym sessions, yoga, and more to earn points. The goal is to build a healthy habit, cheer on your colleagues, and have fun moving together! 🌟\n\nAnything else you'd like to know?";
       case 'log_activity':
-        return "Logging an activity is super easy!\n\n1️⃣ Click the **➕ Log Activity** tab\n2️⃣ Choose your activity type\n3️⃣ Pick the date\n4️⃣ Optionally add distance / duration\n5️⃣ Hit **Log Activity** — done! ✅\n\n💡 Or just tap **📝 Log an activity for me** below and I'll walk you through it! 🦏";
+        return "Logging an activity is super easy!\n\n1️⃣ Click the **➕ Log Activity** tab\n2️⃣ Choose your activity type\n3️⃣ Pick the date\n4️⃣ Optionally add distance / duration\n5️⃣ In a challenge? Under **🏁 Is this for a challenge?** tap **Yes, count it 🎯** and pick it\n6️⃣ Hit **Log Activity** — done! ✅\n\n💡 Or just tap **📝 Log an activity for me** below and I'll walk you through it! 🦏";
+      case 'log_challenge':
+        return "To make an activity count toward a challenge like **Project 50**:\n\n1️⃣ **Join it first.** Tap **🏁 Featured challenges** below, or open the **Challenges** tab\n2️⃣ Log a **run, walk or hike** (or a **ride** for cycling challenges)\n3️⃣ Add the **distance (km)**, it's required for challenges\n4️⃣ Under **🏁 Is this for a challenge?** tap **Yes, count it 🎯** and pick the challenge\n5️⃣ Hit **Log Activity** ✅\n\n⚠️ Activities you don't tag won't count, and the date has to fall inside the challenge dates.\n\n💡 Tap **📝 Log an activity for me** below and I'll ask about your challenges for you! 🦏";
       case 'points':
         return "Here's the full points breakdown:\n\n🏃 **Run / Workout session** — 2 points\n🍃 **Lunch-time activity** — 1 point\n📋 **Sign up for a race** — 5 points\n🏅 **Complete a race** — 10 points\n\n💡 This is about **consistency, not intensity**. Every move matters! 🦏";
       case 'tiers':
