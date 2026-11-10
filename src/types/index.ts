@@ -221,3 +221,33 @@ export const DEFAULT_COUNTRIES: CountryConfig[] = [
   { name: 'Sudan', flag: '🇸🇩', isActive: false },
   { name: 'Seychelles', flag: '🇸🇨', isActive: false },
 ];
+
+// ─── YEF 2026 (Year-End Function): Secret Santa + Awards ─────────────────────
+export const YEF_GIFT_BUDGET_KES = 1000;
+export const YEF_LIKES_MAX = 300;
+export const YEF_AWARD_TITLE_MAX = 60;
+export const YEF_AWARD_DESC_MAX = 200;
+// Everyone on the Year-End list: the Secret Santa pool and the award nominees. `claimedBy` links the
+// PaceTracker member who said "this is me", so only they can edit their likes or vote as this person.
+export interface YefPerson { id: string; name: string; department: string; likes?: string; claimedBy?: string; claimedByName?: string; addedAt: string; }
+// Groups of person ids: a pair gifts each other; a trio (only when the count is odd) gifts in a ring, A→B→C→A.
+export interface YefSantaState { published: boolean; groups: string[][]; generatedAt?: string; }
+export type YefAwardStatus = 'suggested' | 'approved' | 'rejected';
+export interface YefAward { id: string; title: string; description?: string; status: YefAwardStatus; noSameDepartment?: boolean; suggestedByName?: string; createdAt: string; }
+export interface YefSettings { votingOpen: boolean; resultsRevealed: boolean; }
+export const DEFAULT_YEF_SETTINGS: YefSettings = { votingOpen: false, resultsRevealed: false };
+
+// Who each member of a group buys for. In a pair that's the other person; in a trio it's the next one round.
+export function yefGiftTarget(group: string[], personId: string): string | null {
+  const i = group.indexOf(personId);
+  if (i === -1 || group.length < 2) return null;
+  return group[(i + 1) % group.length];
+}
+export function yefGiftFrom(group: string[], personId: string): string | null {
+  const i = group.indexOf(personId);
+  if (i === -1 || group.length < 2) return null;
+  return group[(i - 1 + group.length) % group.length];
+}
+export function sameDepartment(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
