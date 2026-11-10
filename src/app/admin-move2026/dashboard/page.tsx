@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { MemberStats, CountryConfig, TIER_CONFIG, PointTier, getCountryFlag } from '@/types';
 import { getSticker, getStickerTier, STICKER_BG, STICKER_LABELS } from '@/lib/stickers';
+import EngagementPanel from '@/components/admin/EngagementPanel';
 
 interface StreakDay { date: string; hasActivity: boolean; isToday: boolean; }
 interface Milestone { days: number; label: string; emoji: string; achieved: boolean; }
@@ -48,6 +49,7 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+      <EngagementPanel />
       {myStreak && (
         <div style={{background:'white',borderRadius:16,padding:20,border:'1px solid #f3f4f6',marginBottom:20}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:8}}>
