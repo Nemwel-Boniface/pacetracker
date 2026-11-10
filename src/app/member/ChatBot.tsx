@@ -20,7 +20,10 @@ interface LogDraft {
   notes?: string;
   // Set when the log flow was started from a featured challenge: the activity gets tagged to it.
   challenge?: { id: string; title: string; category: ChallengeCategory; startDate: string; endDate: string };
+  // True when the challenge was picked mid-flow (not fixed by starting from it), so a restart clears it.
+  challengePicked?: boolean;
 }
+interface LoggableChallenge { id: string; title: string; category: ChallengeCategory; endDate: string; }
 interface PastChallenge {
   id: string; title: string; startDate: string; endDate: string; goalKm: number; participantCount: number;
   podium: { rank: number; memberName: string; progressKm: number; percentage: number }[];
@@ -30,6 +33,7 @@ type InputMode =
   | 'faqs'
   | 'activity_types'
   | 'dates'
+  | 'challenge_tag'
   | 'optional_details'
   | 'preview_actions'
   | 'login_prompt'
@@ -142,6 +146,7 @@ export default function ChatBot() {
   const [winners, setWinners]       = useState<Winner[]>([]);
   const [logDraft, setLogDraft]     = useState<LogDraft>({});
   const [optionals, setOptionals]   = useState({ distance: '', duration: '', steps: '', notes: '' });
+  const [tagOptions, setTagOptions] = useState<LoggableChallenge[]>([]);
   const [featured, setFeatured]     = useState<FeaturedChallenge[]>([]);
   const [featViewer, setFeatViewer] = useState<FeaturedViewer | null>(null);
   const [activeChal, setActiveChal] = useState<FeaturedChallenge | null>(null);
@@ -433,21 +438,55 @@ export default function ChatBot() {
     }, 1000);
   }
 
-  function handleDateSelect(date: string, label: string, sub: string) {
+  async function handleDateSelect(date: string, label: string, sub: string) {
     if (thinking) return;
     const dateLabel = `${label} · ${sub}`;
     setLogDraft(d => ({ ...d, date, dateLabel }));
     setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: dateLabel }]);
     setInputMode('none');
     setThinking(true);
-    setTimeout(() => {
-      setThinking(false);
-      setMessages(prev => [...prev, {
-        id: `b-${Date.now()}`, role: 'bot',
-        text: "Got it! Want to add any extra details? All fields are optional — just tap **Continue** to skip them.",
-      }]);
-      setInputMode('optional_details');
-    }, 900);
+
+    // Not started from a challenge: offer the member's joined challenges that would count this activity.
+    let fitting: LoggableChallenge[] = [];
+    if (!logDraft.challenge && logDraft.activityType) {
+      const type = logDraft.activityType;
+      const [list] = await Promise.all([
+        fetch(`/api/member/challenges/loggable?date=${date}`)
+          .then(r => r.json()).then(d => (d.challenges || []) as LoggableChallenge[]).catch(() => []),
+        pause(900),
+      ]);
+      fitting = list.filter(c => CHALLENGE_CATEGORY_ACTIVITY_TYPES[c.category].includes(type));
+    } else {
+      await pause(900);
+    }
+    setThinking(false);
+
+    if (fitting.length > 0) {
+      setTagOptions(fitting);
+      say(fitting.length === 1
+        ? `🏁 Is this for a challenge? You're in **${fitting[0].title}**, want this to count toward it?`
+        : `🏁 Is this for a challenge? You're in **${fitting.length}** challenges this could count toward. Pick one, or log it normally.`);
+      setInputMode('challenge_tag');
+      return;
+    }
+    askOptionalDetails();
+  }
+
+  function askOptionalDetails(challengeTitle?: string) {
+    say(challengeTitle
+      ? `Nice, it'll count toward **${challengeTitle}**! 🎯\n\nAdd the **distance (km)**, it's required for the challenge. Everything else is optional.`
+      : "Got it! Want to add any extra details? All fields are optional — just tap **Continue** to skip them.");
+    setInputMode('optional_details');
+  }
+
+  function handleChallengeTag(c: LoggableChallenge | null) {
+    if (thinking) return;
+    echo(c ? `Yes, count it for ${c.title} 🎯` : 'No, just a normal log');
+    if (c) {
+      // startDate is only used to filter date options, which are already chosen at this point.
+      setLogDraft(d => ({ ...d, challengePicked: true, challenge: { id: c.id, title: c.title, category: c.category, startDate: d.date!, endDate: c.endDate } }));
+    }
+    askOptionalDetails(c?.title);
   }
 
   function handleOptionalDetails() {
@@ -557,7 +596,7 @@ export default function ChatBot() {
   }
 
   function restartLogFlow() {
-    setLogDraft(d => (d.challenge ? { challenge: d.challenge } : {}));
+    setLogDraft(d => (d.challenge && !d.challengePicked ? { challenge: d.challenge } : {}));
     setOptionals({ distance: '', duration: '', steps: '', notes: '' });
     setMessages(prev => [...prev, {
       id: `b-${Date.now()}`, role: 'bot',
@@ -779,6 +818,21 @@ export default function ChatBot() {
                         <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{opt.sub}</div>
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Challenge tag choice */}
+              {inputMode === 'challenge_tag' && (
+                <div style={{ padding: '10px 13px 13px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 7 }}>Is this for a challenge?</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 190, overflowY: 'auto' }}>
+                    {tagOptions.map(c => (
+                      <button key={c.id} onClick={() => handleChallengeTag(c)} style={{ ...btnPill(), borderRadius: 12, textAlign: 'left', whiteSpace: 'normal', padding: '8px 12px' }} onMouseOver={hoverGreen} onMouseOut={e => hoverReset(e)}>
+                        🎯 Yes, count it for {c.title}{tagOptions.some(o => o.id !== c.id && o.title === c.title) ? ` (ends ${fmtShort(c.endDate)})` : ''}
+                      </button>
+                    ))}
+                    <button onClick={() => handleChallengeTag(null)} style={{ ...btnPill(), borderRadius: 12, color: '#6b7280' }}>No, just a normal log</button>
                   </div>
                 </div>
               )}
