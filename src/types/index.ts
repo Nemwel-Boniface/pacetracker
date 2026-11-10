@@ -143,6 +143,29 @@ export function facilitatorNames(c: Challenge): string {
   const names = [c.ownerName, ...(c.coFacilitators ?? []).map(f => f.name)];
   return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
 }
+// Ready-to-paste Slack/WhatsApp text for inviting people to a distance challenge (*bold* works in both).
+export function challengeInviteMessage(c: {
+  id: string; title: string; description?: string; goalKm: number; category: ChallengeCategory;
+  startDate: string; endDate: string; facilitators: string; inviteOnly?: boolean;
+}, origin: string): string {
+  const fmt = (d: string) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const moves = c.category === 'cycling' ? 'ride' : 'run, walk or hike';
+  return [
+    `🏁 Join me in *${c.title}*!`,
+    ...(c.description ? ['', c.description] : []),
+    '',
+    `🎯 Goal: ${c.goalKm} km (${c.category === 'cycling' ? 'cycling' : 'runs, walks and hikes'})`,
+    `📆 ${fmt(c.startDate)} – ${fmt(c.endDate)}`,
+    `🤝 Facilitated by ${c.facilitators}`,
+    '',
+    '*How to join*',
+    `1. Log in (or create an account) here: ${origin}/authenticate?next=/member/challenges/${c.id}`,
+    c.inviteOnly ? '2. Accept the invite waiting on your Challenges page' : '2. Tap *Join*',
+    `3. Each time you log a ${moves}, add the distance and pick *${c.title}* under "Is this for a challenge?"`,
+    '',
+    'See you out there! 🦏',
+  ].join('\n');
+}
 export const DEFAULT_MAX_FEATURED_CHALLENGES = 3;
 
 export interface AppSettings {

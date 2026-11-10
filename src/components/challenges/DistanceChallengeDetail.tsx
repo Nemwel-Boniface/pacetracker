@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_DESCRIPTION_MAX, MAX_CO_FACILITATORS, facilitatorNames } from '@/types';
+import { Challenge, ChallengeParticipant, ChallengeLeaderboardEntry, ChallengeMemberStats, ChallengePace, CHALLENGE_CATEGORY_LABELS, CHALLENGE_PERIOD_LABELS, CHALLENGE_DESCRIPTION_MAX, MAX_CO_FACILITATORS, facilitatorNames, challengeInviteMessage } from '@/types';
 import { actorInit } from '@/lib/actorClient';
 import PeoplePicker from '@/components/PeoplePicker';
 
@@ -67,6 +67,17 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
   useEffect(() => {
     fetch('/api/member/peers', actorInit(asAdmin)).then(r => r.json()).then(d => setPeers(d.peers || [])).catch(() => {});
   }, [asAdmin]);
+
+  async function copyInviteMessage() {
+    if (!data) return;
+    const c = data.challenge;
+    const text = challengeInviteMessage({
+      id: c.id, title: c.title, description: c.description, goalKm: c.goalKm!, category: c.category!,
+      startDate: c.startDate!, endDate: c.endDate!, facilitators: facilitatorNames(c), inviteOnly: c.visibility !== 'open',
+    }, window.location.origin);
+    try { await navigator.clipboard.writeText(text); toast.success('Invite message copied, paste it in Slack or WhatsApp'); }
+    catch { toast.error("Couldn't copy, your browser blocked the clipboard"); }
+  }
 
   async function sendInvites() {
     if (inviteIds.length === 0) return;
@@ -378,6 +389,10 @@ export default function DistanceChallengeDetail({ id, basePath, asAdmin }: { id:
           <button onClick={sendInvites} disabled={sendingInvites || inviteIds.length === 0} style={{ marginTop: 10, padding: '9px 18px', borderRadius: 8, background: sendingInvites || inviteIds.length === 0 ? '#9ca3af' : '#1a7a4a', color: 'white', fontWeight: 700, fontSize: 13, border: 'none', cursor: sendingInvites || inviteIds.length === 0 ? 'not-allowed' : 'pointer' }}>
             {sendingInvites ? 'Sending…' : 'Send Invites'}
           </button>
+          <button onClick={copyInviteMessage} style={{ marginTop: 10, marginLeft: 8, padding: '9px 18px', borderRadius: 8, background: 'white', color: '#145c38', fontWeight: 700, fontSize: 13, border: '1.5px solid #1a7a4a', cursor: 'pointer' }}>
+            📋 Copy invite message
+          </button>
+          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>A ready-made message for Slack or WhatsApp{challenge.visibility === 'open' ? '' : '. Send the invite above too, so they can join'}.</div>
           {participants && participants.some(p => p.status !== 'accepted') && (
             <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #f3f4f6' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Other invites</div>
