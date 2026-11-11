@@ -182,8 +182,10 @@ export interface AppSettings {
   marathonCountries: string[]; // empty = all countries; specific names = only those
   // Soft cap on live featured challenges. Admins can still override it per challenge.
   maxFeaturedChallenges: number;
+  // "You haven't logged today" prompt shown to members who have logged before, when they open the app.
+  logPromptEnabled: boolean;
 }
-export const DEFAULT_APP_SETTINGS: AppSettings = { marathonBannerEnabled: true, marathonCountries: [], maxFeaturedChallenges: DEFAULT_MAX_FEATURED_CHALLENGES };
+export const DEFAULT_APP_SETTINGS: AppSettings = { marathonBannerEnabled: true, marathonCountries: [], maxFeaturedChallenges: DEFAULT_MAX_FEATURED_CHALLENGES, logPromptEnabled: true };
 export const DEFAULT_COUNTRIES: CountryConfig[] = [
   { name: 'Kenya', flag: '🇰🇪', isActive: true },
   { name: 'Rwanda', flag: '🇷🇼', isActive: true },

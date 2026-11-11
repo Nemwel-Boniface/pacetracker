@@ -19,6 +19,8 @@ export default function SettingsPage() {
   const [marathonBannerEnabled, setMarathonBannerEnabled] = useState(true);
   const [marathonCountries, setMarathonCountries] = useState<string[]>([]);
   const [togglingBanner, setTogglingBanner] = useState(false);
+  const [logPromptEnabled, setLogPromptEnabled] = useState(true);
+  const [togglingLogPrompt, setTogglingLogPrompt] = useState(false);
   const [savingCountries, setSavingCountries] = useState(false);
   const [maxFeatured, setMaxFeatured] = useState('3');
   const [savedMaxFeatured, setSavedMaxFeatured] = useState(3);
@@ -65,6 +67,7 @@ export default function SettingsPage() {
     ]).then(([cd, sd, ex]) => {
       setCountries(cd.countries || []);
       setMarathonBannerEnabled(sd.settings?.marathonBannerEnabled ?? true);
+      setLogPromptEnabled(sd.settings?.logPromptEnabled ?? true);
       setMarathonCountries(sd.settings?.marathonCountries ?? []);
       setMaxFeatured(String(sd.settings?.maxFeaturedChallenges ?? 3));
       setSavedMaxFeatured(sd.settings?.maxFeaturedChallenges ?? 3);
@@ -106,6 +109,15 @@ export default function SettingsPage() {
       const data = await res.json();
       if (res.ok) setMarathonBannerEnabled(data.settings.marathonBannerEnabled);
     } catch { /* silent */ } finally { setTogglingBanner(false); }
+  }
+
+  async function handleToggleLogPrompt() {
+    setTogglingLogPrompt(true);
+    try {
+      const res = await fetch('/api/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ logPromptEnabled: !logPromptEnabled }) });
+      const data = await res.json();
+      if (res.ok) setLogPromptEnabled(data.settings.logPromptEnabled);
+    } catch { /* silent */ } finally { setTogglingLogPrompt(false); }
   }
 
   async function saveMarathonCountries(next: string[]) {
@@ -265,6 +277,22 @@ export default function SettingsPage() {
           </button>
           <span style={{ fontSize: 12, color: '#9ca3af' }}>Default is 3</span>
         </div>
+      </div>
+
+      {/* ─── Daily log prompt ─── */}
+      <div style={{ marginTop: 32, background: 'white', borderRadius: 16, border: '1px solid #e0e7ef', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 22 }}>🦏</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, color: '#1f2937' }}>Daily &ldquo;log today&rdquo; prompt</div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>When a member who has logged before opens the app and has nothing logged today, show a reminder card. They can hide it until tomorrow.</div>
+        </div>
+        <button
+          onClick={handleToggleLogPrompt}
+          disabled={togglingLogPrompt}
+          style={{ flexShrink: 0, padding: '7px 16px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 13, cursor: togglingLogPrompt ? 'not-allowed' : 'pointer', background: logPromptEnabled ? '#16a34a' : '#6b7280', color: 'white', opacity: togglingLogPrompt ? 0.6 : 1 }}
+        >
+          {togglingLogPrompt ? '…' : logPromptEnabled ? '🟢 Prompt On' : '⚫ Prompt Off'}
+        </button>
       </div>
 
       {/* ─── Marathon Banner ─── */}
