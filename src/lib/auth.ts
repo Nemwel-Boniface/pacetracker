@@ -3,6 +3,8 @@ import { cookies } from 'next/headers';
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'pacetracker-fallback-secret-32-chars!!');
 const ADMIN_COOKIE = 'pt_admin_session';
 const MEMBER_COOKIE = 'pt_member_session';
+// Members stay signed in for 30 days; middleware.ts quietly renews the token while they keep using the app.
+const MEMBER_SESSION_DAYS = 30;
 
 export const ADMIN_CREDENTIALS = {
   email: process.env.ADMIN_EMAIL || 'n.nyandoro@edencaremedical.com',
@@ -30,7 +32,7 @@ export function getSessionCookieOptions() {
 export async function createMemberToken(memberId: string, email: string, requiresPasswordChange = false): Promise<string> {
   const claims: Record<string, unknown> = { sub: memberId, email, role: 'member' };
   if (requiresPasswordChange) claims.pch = true;
-  return await new SignJWT(claims).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('24h').sign(SECRET);
+  return await new SignJWT(claims).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime(`${MEMBER_SESSION_DAYS}d`).sign(SECRET);
 }
 export async function verifyMemberToken(token: string): Promise<{ sub: string; email: string; role: string; pch?: boolean } | null> {
   try {
@@ -48,5 +50,5 @@ export async function getMemberSession(): Promise<{ memberId: string; email: str
   return { memberId: payload.sub, email: payload.email, requiresPasswordChange: payload.pch };
 }
 export function getMemberCookieOptions() {
-  return { name: MEMBER_COOKIE, httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, maxAge: 86400, path: '/' };
+  return { name: MEMBER_COOKIE, httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, maxAge: MEMBER_SESSION_DAYS * 86400, path: '/' };
 }
