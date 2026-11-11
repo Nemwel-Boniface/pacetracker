@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import MarathonNotice from './MarathonNotice';
+import InstallPrompt from './InstallPrompt';
+import LogReminder from './LogReminder';
 
 export default function MemberLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -102,6 +104,8 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
         </div>
       </header>
       <main style={{ maxWidth: 768, margin: '0 auto', padding: '20px 16px' }}>
+        <InstallPrompt />
+        <LogReminder />
         {children}
       </main>
       <style>{`
