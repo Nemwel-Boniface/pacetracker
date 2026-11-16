@@ -5,7 +5,8 @@ import { YEF_AWARD_TITLE_MAX, YEF_AWARD_DESC_MAX, yefGiftTarget, yefGiftFrom } f
 
 const MAX_PENDING_SUGGESTIONS = 100;
 
-// Public YEF 2026 page data (no login). Pairs only once the admin publishes; vote counts never, winners
+// Public YEF 2026 page data (no login). The full pairs list is never sent (people find their partner one at a
+// time through the reveal wheel, and the admin page keeps the full list); vote counts never, winners
 // only once results are revealed. Member ids behind claims are never exposed, just whether a name is taken.
 // ?partnerOf={personId} looks up one person's Secret Santa partner, which is how the reveal wheel finds out
 // where to land.
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
       : null;
     return NextResponse.json({
       people: people.map(p => ({ id: p.id, name: p.name, department: p.department, likes: p.likes ?? '', claimed: !!p.claimedBy })),
-      santa: { published: santa.published, groups: santa.published ? santa.groups : [] },
+      santa: { published: santa.published },
       awards: ballot.map(a => ({ id: a.id, title: a.title, description: a.description ?? '', noSameDepartment: !!a.noSameDepartment })),
       settings, results,
     });

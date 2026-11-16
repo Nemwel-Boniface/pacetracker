@@ -1,19 +1,29 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { YEF_GIFT_BUDGET_KES, YEF_AWARD_TITLE_MAX, YEF_AWARD_DESC_MAX, yefGiftTarget, yefGiftFrom } from '@/types';
+import { YEF_GIFT_BUDGET_KES, YEF_AWARD_TITLE_MAX, YEF_AWARD_DESC_MAX } from '@/types';
+import SantaWheel, { Confetti, unlockWheelAudio } from '@/components/SantaWheel';
+import SantaShareCard from '@/components/SantaShareCard';
 
 interface PublicPerson { id: string; name: string; department: string; likes: string; claimed: boolean; }
 interface PublicAward { id: string; title: string; description: string; noSameDepartment: boolean; }
 interface YefData {
   people: PublicPerson[];
-  santa: { published: boolean; groups: string[][] };
+  santa: { published: boolean };
   awards: PublicAward[];
   settings: { votingOpen: boolean; resultsRevealed: boolean };
   results: { awardId: string; winnerIds: string[] }[] | null;
 }
 
 const MEMBER_YEF = '/authenticate?next=/member/yef';
+const SPIN_MS = 10000;
+const SPIN_MS_REDUCED = 3000;
+
+// Per-device conveniences only: whether this person has already watched their spin, and sound on or off.
+function remember(key: string, value?: string) {
+  try { if (value === undefined) return localStorage.getItem(key); localStorage.setItem(key, value); } catch { /* storage blocked */ }
+  return null;
+}
 const card = { background: 'white', borderRadius: 16, padding: 22, border: '1px solid #f3f4f6', marginBottom: 16 };
 const inp = { width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' };
 const cta = { display: 'inline-block', padding: '10px 18px', borderRadius: 10, background: '#1a7a4a', color: 'white', fontWeight: 700, fontSize: 13, textDecoration: 'none' };
@@ -38,13 +48,50 @@ export default function Yef2026Page() {
   const [suggestion, setSuggestion] = useState({ title: '', description: '', name: '' });
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  // Reveal flow for the chosen name: look up the partner, then ready → spinning → revealed.
+  const [partner, setPartner] = useState<{ toId: string | null; fromId: string | null } | null>(null);
+  const [stage, setStage] = useState<'ready' | 'spinning' | 'revealed'>('ready');
+  const [spinId, setSpinId] = useState(0);
+  // The wheel only renders after the data loads in the browser, so reading these on first render is safe.
+  const [muted, setMuted] = useState(() => typeof window !== 'undefined' && remember('yef-wheel-muted') === '1');
+  const [reducedMotion] = useState(() => typeof window !== 'undefined' && (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false));
+  const [spunBefore, setSpunBefore] = useState(false);
+  const [instant, setInstant] = useState(false);
 
   useEffect(() => {
     fetch('/api/yef').then(r => r.json()).then(d => { if (d.error) setFailed(true); else setData(d); }).catch(() => setFailed(true));
   }, []);
 
+  function choose(id: string | null) {
+    setSelected(id); setPartner(null); setStage('ready');
+    if (!id || !data?.santa.published) return;
+    setSpunBefore(remember(`yef-spun:${id}`) === '1');
+    fetch(`/api/yef?partnerOf=${encodeURIComponent(id)}`).then(r => r.json())
+      .then(d => { if (!d.error) setPartner({ toId: d.toId, fromId: d.fromId }); })
+      .catch(() => setPartner({ toId: null, fromId: null }));
+  }
+
+  function spin() {
+    if (!muted) unlockWheelAudio();
+    setInstant(false); setStage('spinning');
+  }
+  // For people who've already watched their spin: snap the wheel straight onto their partner.
+  function skip() {
+    setInstant(true); setStage('spinning');
+  }
+  function revealed() {
+    setStage('revealed');
+    if (selected) { remember(`yef-spun:${selected}`, '1'); setSpunBefore(true); }
+  }
+  function spinAgain() {
+    setSpinId(n => n + 1);
+    setStage('ready');
+  }
+  function toggleMute() {
+    setMuted(m => { remember('yef-wheel-muted', m ? '0' : '1'); return !m; });
+  }
+
   const byId = useMemo(() => new Map((data?.people ?? []).map(p => [p.id, p])), [data]);
-  const groupOf = (id: string) => data?.santa.groups.find(g => g.includes(id)) ?? null;
   const results = useMemo(() => new Map((data?.results ?? []).map(r => [r.awardId, r.winnerIds])), [data]);
 
   async function suggest(e: React.FormEvent) {
@@ -61,7 +108,6 @@ export default function Yef2026Page() {
   const people = data?.people ?? [];
   const found = query.trim() ? people.filter(p => matches(p, query)).slice(0, 8) : [];
   const chosen = selected ? byId.get(selected) : null;
-  const chosenGroup = chosen ? groupOf(chosen.id) : null;
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8' }}>
@@ -92,7 +138,7 @@ export default function Yef2026Page() {
                 This year&apos;s gift exchange is about bringing us closer together. You&apos;re paired with a colleague, usually from another team, and you gift each other. The fun part is finding out what they love before you shop!
               </p>
               <ol style={{ margin: '0 0 14px', paddingLeft: 20, fontSize: 14, color: '#374151', lineHeight: 1.8 }}>
-                <li>Search your name below to find your partner.</li>
+                <li>Search your name below, then tap Spin to find out who your partner is.</li>
                 <li>Learn what they like: check their likes here, or have a chat and find out their hobbies.</li>
                 <li>Get them a thoughtful gift and bring it to the Year-End Function.</li>
                 <li>Add your own likes so your partner has some ideas too.</li>
@@ -104,12 +150,13 @@ export default function Yef2026Page() {
             </div>
 
             <div style={card}>
-              <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 10px' }}>🔎 Find your partner</h3>
-              <input value={query} onChange={e => { setQuery(e.target.value); setSelected(null); }} placeholder="Type your name…" style={inp} />
+              <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>🎡 Spin to find your partner</h3>
+              <p style={{ fontSize: 12, color: '#9ca3af', margin: '0 0 10px' }}>Search your name, tap it, then spin the wheel to see who you&apos;re gifting.</p>
+              <input value={query} onChange={e => { setQuery(e.target.value); if (selected) choose(null); }} placeholder="Search your name…" style={inp} />
               {found.length > 0 && !selected && (
                 <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {found.map(p => (
-                    <button key={p.id} onClick={() => setSelected(p.id)} style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: 14 }}>
+                    <button key={p.id} onClick={() => { choose(p.id); setQuery(p.name); }} style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: 14 }}>
                       <strong>{p.name}</strong> <span style={{ color: '#9ca3af', fontSize: 12 }}>· {p.department}</span>
                     </button>
                   ))}
@@ -118,19 +165,63 @@ export default function Yef2026Page() {
               {query.trim() && found.length === 0 && <p style={{ fontSize: 13, color: '#9ca3af', margin: '10px 0 0' }}>No one by that name. Not on the list? Let the organisers know.</p>}
               {chosen && (
                 <div style={{ marginTop: 12, padding: 16, borderRadius: 12, background: '#f9fafb', border: '1px solid #f3f4f6' }}>
-                  {!data.santa.published && <p style={{ margin: 0, fontSize: 14, color: '#374151' }}>Hi <strong>{chosen.name}</strong>! 🎅 Pairs haven&apos;t been revealed yet. Check back soon, and add your likes in the meantime.</p>}
-                  {data.santa.published && !chosenGroup && <p style={{ margin: 0, fontSize: 14, color: '#374151' }}>Hi <strong>{chosen.name}</strong>! You haven&apos;t been paired yet. The organisers will sort it out shortly.</p>}
-                  {data.santa.published && chosenGroup && (() => {
-                    const to = byId.get(yefGiftTarget(chosenGroup, chosen.id)!);
-                    const from = byId.get(yefGiftFrom(chosenGroup, chosen.id)!);
+                  {!data.santa.published && <p style={{ margin: 0, fontSize: 14, color: '#374151' }}>Hi <strong>{chosen.name}</strong>! 🎅 The wheel isn&apos;t open yet. Check back once pairs are revealed, and add your likes in the meantime.</p>}
+                  {data.santa.published && !partner && <p style={{ margin: 0, fontSize: 14, color: '#9ca3af' }}>Getting the wheel ready…</p>}
+                  {data.santa.published && partner && !partner.toId && <p style={{ margin: 0, fontSize: 14, color: '#374151' }}>Hi <strong>{chosen.name}</strong>! You haven&apos;t been paired yet. The organisers will sort it out shortly.</p>}
+                  {data.santa.published && partner?.toId && (() => {
+                    const to = byId.get(partner.toId);
+                    const from = partner.fromId ? byId.get(partner.fromId) : undefined;
+                    if (!to) return null;
                     return (
                       <>
-                        <div style={{ fontSize: 13, color: '#6b7280' }}>Hi {chosen.name}, you&apos;re gifting</div>
-                        <div style={{ fontSize: 22, fontWeight: 900, color: '#145c38', margin: '2px 0' }}>🎁 {to?.name}</div>
-                        <div style={{ fontSize: 12, color: '#9ca3af' }}>{to?.department}</div>
-                        {to && <Likes person={to} />}
-                        {from && from.id !== to?.id && <p style={{ fontSize: 13, color: '#6b7280', margin: '10px 0 0' }}>You&apos;re in a group of three: <strong>{from.name}</strong> is gifting you.</p>}
-                        {from && from.id === to?.id && <p style={{ fontSize: 13, color: '#6b7280', margin: '10px 0 0' }}>And {to?.name} is gifting you. 🤝</p>}
+                        <div style={{ textAlign: 'center', marginBottom: 10 }}>
+                          <div style={{ fontSize: 13, color: '#6b7280' }}>Hi {chosen.name} 👋</div>
+                          <div style={{ fontSize: 16, fontWeight: 900, color: '#145c38' }}>
+                            {stage === 'ready' && 'Who will you be gifting?'}
+                            {stage === 'spinning' && 'Spinning… 🤞'}
+                            {stage === 'revealed' && `It's ${to.name}! 🎉`}
+                          </div>
+                        </div>
+
+                        <SantaWheel
+                          key={`${chosen.id}-${spinId}`}
+                          pool={people.filter(p => p.id !== chosen.id)}
+                          target={to}
+                          spinning={stage !== 'ready'}
+                          durationMs={instant ? 1 : reducedMotion ? SPIN_MS_REDUCED : SPIN_MS}
+                          muted={muted}
+                          onDone={revealed}
+                        />
+
+                        {stage === 'ready' && (
+                          <div style={{ textAlign: 'center', marginTop: 14 }}>
+                            <button onClick={spin} style={{ padding: '14px 32px', borderRadius: 999, background: '#f26522', color: 'white', fontWeight: 900, fontSize: 16, border: 'none', cursor: 'pointer', boxShadow: '0 6px 16px rgba(242,101,34,0.35)' }}>🎡 Spin!</button>
+                            <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center', gap: 14, fontSize: 12 }}>
+                              <button onClick={toggleMute} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 12 }}>{muted ? '🔇 Sound off' : '🔊 Sound on'}</button>
+                              {spunBefore && <button onClick={skip} style={{ background: 'none', border: 'none', color: '#1a7a4a', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Skip to my result →</button>}
+                            </div>
+                          </div>
+                        )}
+
+                        {stage === 'revealed' && (
+                          <>
+                            <Confetti key={spinId} />
+                            <div style={{ marginTop: 16, padding: 14, background: 'white', borderRadius: 12, border: '1px solid #f3f4f6' }}>
+                              <div style={{ fontSize: 13, color: '#6b7280' }}>You&apos;re gifting</div>
+                              <div style={{ fontSize: 22, fontWeight: 900, color: '#145c38', margin: '2px 0' }}>🎁 {to.name}</div>
+                              <div style={{ fontSize: 12, color: '#9ca3af' }}>{to.department}</div>
+                              <Likes person={to} />
+                              {from && from.id !== to.id && <p style={{ fontSize: 13, color: '#6b7280', margin: '10px 0 0' }}>You&apos;re in a group of three: <strong>{from.name}</strong> is gifting you.</p>}
+                              {from && from.id === to.id && <p style={{ fontSize: 13, color: '#6b7280', margin: '10px 0 0' }}>And {to.name} is gifting you. 🤝</p>}
+                            </div>
+                            <div style={{ marginTop: 16 }}>
+                              <SantaShareCard name={chosen.name} gifting={to.name} giftedBy={from?.name ?? null} />
+                            </div>
+                            <div style={{ textAlign: 'center', marginTop: 10 }}>
+                              <button onClick={spinAgain} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>🔁 Spin again</button>
+                            </div>
+                          </>
+                        )}
                       </>
                     );
                   })()}
@@ -138,20 +229,13 @@ export default function Yef2026Page() {
               )}
             </div>
 
-            <div style={card}>
-              <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>{data.santa.published ? '🤝 All pairs' : `👥 Who's taking part (${people.length})`}</h3>
-              <p style={{ fontSize: 12, color: '#9ca3af', margin: '0 0 12px' }}>{data.santa.published ? 'Each pair gifts each other. A group of three gifts round in a circle.' : 'Pairs will appear here once they are revealed.'}</p>
-              {data.santa.published
-                ? data.santa.groups.filter(g => g.some(id => matches(byId.get(id)!, query))).map(g => (
-                    <div key={g.join()} style={{ padding: '10px 12px', background: '#f9fafb', borderRadius: 10, marginBottom: 6, fontSize: 13 }}>
-                      {g.map((id, i) => (
-                        <span key={id}>{i > 0 && <span style={{ color: '#f26522', fontWeight: 900 }}>{g.length === 2 ? ' ↔ ' : ' → '}</span>}<strong>{byId.get(id)?.name}</strong> <span style={{ color: '#9ca3af', fontSize: 11 }}>({byId.get(id)?.department})</span></span>
-                      ))}
-                      {g.length === 3 && <span style={{ color: '#f26522', fontWeight: 900 }}> → back to {byId.get(g[0])?.name}</span>}
-                    </div>
-                  ))
-                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{people.filter(p => matches(p, query)).map(p => <span key={p.id} style={{ padding: '5px 10px', background: '#f9fafb', borderRadius: 999, fontSize: 12, color: '#374151' }}>{p.name}</span>)}</div>}
-            </div>
+            {!data.santa.published && (
+              <div style={card}>
+                <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>👥 Who&apos;s taking part ({people.length})</h3>
+                <p style={{ fontSize: 12, color: '#9ca3af', margin: '0 0 12px' }}>Once pairs are revealed, search your name above and spin to find your partner.</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{people.filter(p => matches(p, query)).map(p => <span key={p.id} style={{ padding: '5px 10px', background: '#f9fafb', borderRadius: 999, fontSize: 12, color: '#374151' }}>{p.name}</span>)}</div>
+              </div>
+            )}
           </>
         )}
 
