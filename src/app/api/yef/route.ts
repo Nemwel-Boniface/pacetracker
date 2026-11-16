@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getYefPeople, getSantaState, getYefAwards, getYefSettings, getYefVotes, tallyVotes, saveYefAward } from '@/lib/yef';
-import { YEF_AWARD_TITLE_MAX, YEF_AWARD_DESC_MAX } from '@/types';
+import { YEF_AWARD_TITLE_MAX, YEF_AWARD_DESC_MAX, yefGiftTarget, yefGiftFrom } from '@/types';
 
 const MAX_PENDING_SUGGESTIONS = 100;
 
 // Public YEF 2026 page data (no login). Pairs only once the admin publishes; vote counts never, winners
 // only once results are revealed. Member ids behind claims are never exposed, just whether a name is taken.
-export async function GET() {
+// ?partnerOf={personId} looks up one person's Secret Santa partner, which is how the reveal wheel finds out
+// where to land.
+export async function GET(req: NextRequest) {
   try {
+    const partnerOf = req.nextUrl.searchParams.get('partnerOf');
+    if (partnerOf) {
+      const santa = await getSantaState();
+      const group = santa.published ? santa.groups.find(g => g.includes(partnerOf)) : undefined;
+      return NextResponse.json({
+        published: santa.published,
+        toId: group ? yefGiftTarget(group, partnerOf) : null,
+        fromId: group ? yefGiftFrom(group, partnerOf) : null,
+      });
+    }
     const [people, santa, awards, settings] = await Promise.all([getYefPeople(), getSantaState(), getYefAwards(), getYefSettings()]);
     const ballot = awards.filter(a => a.status === 'approved');
     const results = settings.resultsRevealed

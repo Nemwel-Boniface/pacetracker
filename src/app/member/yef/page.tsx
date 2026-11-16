@@ -2,11 +2,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { YefPerson, YEF_GIFT_BUDGET_KES, YEF_LIKES_MAX, yefGiftTarget, yefGiftFrom, sameDepartment } from '@/types';
+import { YefPerson, YEF_GIFT_BUDGET_KES, YEF_LIKES_MAX, sameDepartment } from '@/types';
 
 interface PublicPerson { id: string; name: string; department: string; likes: string; claimed: boolean; }
 interface PublicAward { id: string; title: string; description: string; noSameDepartment: boolean; }
-interface YefData { people: PublicPerson[]; santa: { published: boolean; groups: string[][] }; awards: PublicAward[]; settings: { votingOpen: boolean; resultsRevealed: boolean }; }
+interface YefData { people: PublicPerson[]; santa: { published: boolean }; awards: PublicAward[]; settings: { votingOpen: boolean; resultsRevealed: boolean }; }
 
 const card = { background: 'white', borderRadius: 16, padding: 22, border: '1px solid #f3f4f6', marginBottom: 16 };
 const inp = { width: '100%', padding: '11px 14px', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' as const, background: 'white' };
@@ -28,6 +28,15 @@ export default function MemberYefPage() {
   const [query, setQuery] = useState('');
   const [likes, setLikes] = useState('');
   const [busy, setBusy] = useState(false);
+  const [partner, setPartner] = useState<{ toId: string | null; fromId: string | null } | null>(null);
+
+  // The public page no longer lists every pair, so look up just this member's partner.
+  useEffect(() => {
+    if (!me || !data?.santa.published) return;
+    fetch(`/api/yef?partnerOf=${encodeURIComponent(me.id)}`).then(r => r.json())
+      .then(d => { if (!d.error) setPartner({ toId: d.toId, fromId: d.fromId }); })
+      .catch(() => {});
+  }, [me, data?.santa.published]);
 
   function load() {
     return Promise.all([fetch('/api/yef').then(r => r.json()), fetch('/api/member/yef').then(r => r.json())])
@@ -98,9 +107,8 @@ export default function MemberYefPage() {
     );
   }
 
-  const group = data.santa.groups.find(g => g.includes(me.id));
-  const to = group ? byId.get(yefGiftTarget(group, me.id)!) : null;
-  const from = group ? byId.get(yefGiftFrom(group, me.id)!) : null;
+  const to = partner?.toId ? byId.get(partner.toId) : null;
+  const from = partner?.fromId ? byId.get(partner.fromId) : null;
   const nominees = data.people.filter(p => p.id !== me.id);
 
   return (
@@ -114,7 +122,8 @@ export default function MemberYefPage() {
       <div style={card}>
         <h3 style={{ fontSize: 16, fontWeight: 900, margin: '0 0 6px' }}>🎁 Your Secret Santa</h3>
         {!data.santa.published && <p style={{ fontSize: 14, color: '#374151', margin: 0 }}>Pairs haven&apos;t been revealed yet. Add your likes below so your partner has ideas when they are! 🎅</p>}
-        {data.santa.published && !to && <p style={{ fontSize: 14, color: '#374151', margin: 0 }}>You haven&apos;t been paired yet. The organisers will sort it out shortly.</p>}
+        {data.santa.published && !partner && <p style={{ fontSize: 14, color: '#9ca3af', margin: 0 }}>Finding your partner…</p>}
+        {data.santa.published && partner && !to && <p style={{ fontSize: 14, color: '#374151', margin: 0 }}>You haven&apos;t been paired yet. The organisers will sort it out shortly.</p>}
         {data.santa.published && to && (
           <>
             <div style={{ fontSize: 13, color: '#6b7280' }}>You&apos;re gifting</div>
