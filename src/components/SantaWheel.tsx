@@ -59,18 +59,17 @@ export default function SantaWheel({ pool, target, spinning, durationMs, muted, 
   });
   const seg = 360 / slices.length;
   const targetIndex = slices.findIndex(s => s.id === target.id);
-  const [rotation, setRotation] = useState(0);
+  // Where the wheel comes to rest: several full turns, then back to the partner's slot. It lands somewhere
+  // inside the slice rather than dead centre, so it doesn't look staged.
+  const [finalRotation] = useState(() => 360 * FULL_TURNS - (targetIndex + 0.5) * seg + (Math.random() - 0.5) * seg * 0.6);
+  const rotation = spinning ? finalRotation : 0;
   const [landed, setLanded] = useState(false);
   const wheelRef = useRef<SVGGElement>(null);
   const mutedRef = useRef(muted);
-  mutedRef.current = muted;
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
 
   useEffect(() => {
     if (!spinning) return;
-    // Land somewhere inside the slice rather than dead centre, so it doesn't look staged.
-    const jitter = (Math.random() - 0.5) * seg * 0.6;
-    setRotation(360 * FULL_TURNS - (targetIndex + 0.5) * seg + jitter);
-
     // Follow the wheel while it turns and tick each time a new name passes the pointer.
     let frame = 0, last = -1;
     const watch = () => {
@@ -107,11 +106,12 @@ export default function SantaWheel({ pool, target, spinning, durationMs, muted, 
             const [x1, y1] = point(i * seg, R);
             const [x2, y2] = point((i + 1) * seg, R);
             const won = landed && i === targetIndex;
+            // Names on the left half are turned the other way so none read upside down.
             return (
               <g key={s.id} opacity={landed && !won ? 0.45 : 1}>
                 <path d={`M0,0 L${x1},${y1} A${R},${R} 0 0 1 ${x2},${y2} Z`} fill={won ? '#facc15' : SLICE_COLORS[i % SLICE_COLORS.length]} stroke="white" strokeWidth={1.5} />
                 <text
-                  transform={`rotate(${(i + 0.5) * seg}) translate(0 ${-R * 0.56}) rotate(-90)`}
+                  transform={`rotate(${(i + 0.5) * seg}) translate(0 ${-R * 0.56}) rotate(${(i + 0.5) * seg > 180 ? 90 : -90})`}
                   textAnchor="middle" dominantBaseline="central"
                   fill={won ? '#145c38' : 'white'} fontSize={12} fontWeight={800}
                 >{label(s.name)}</text>
