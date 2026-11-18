@@ -97,7 +97,7 @@ export default function AuthenticatePage() {
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ width: 48, height: 48, background: 'white', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 12px' }}>🏃</div>
           <h1 style={{ color: 'white', fontWeight: 900, fontSize: 24, margin: '0 0 4px' }}>PaceTracker</h1>
-          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, margin: 0 }}>Eden Care · #Move2026</p>
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, margin: 0 }}>Ginja AI · #Move2026</p>
         </div>
 
         <div style={{ background: 'white', borderRadius: 20, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
