@@ -89,7 +89,7 @@ export default function MethaliTriviaPage() {
             </div>
             <Link href="/leaderboard" style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, textDecoration: 'underline', flexShrink: 0 }}>← Leaderboard</Link>
           </div>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Eden Care · #Move2026</p>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Ginja AI · #Move2026</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: 'clamp(26px,7vw,32px)', fontWeight: 900, margin: '0 0 4px' }}>🏛️ Methali Trivia</h1>
             <span title={live ? 'Live — updates instantly' : 'Reconnecting…'} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, background: 'rgba(255,255,255,0.15)', padding: '3px 9px', borderRadius: 20, marginBottom: 4 }}>
