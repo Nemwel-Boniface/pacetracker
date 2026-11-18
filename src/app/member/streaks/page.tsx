@@ -203,7 +203,7 @@ export default function StreaksPage() {
           )}
 
           <div style={{ textAlign: 'center', fontSize: 10, color: '#d1d5db', marginTop: 16, paddingTop: 12, borderTop: '1px solid #f3f4f6' }}>
-            Eden Care #Move2026 · pacetracker-move2026.vercel.app
+            Ginja AI #Move2026 · pacetracker-move2026.vercel.app
           </div>
         </div>
       </div>

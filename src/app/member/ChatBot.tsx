@@ -184,7 +184,7 @@ export default function ChatBot() {
   function getBotResponse(faqId: string): string {
     switch (faqId) {
       case 'what_is':
-        return "PaceTracker is Eden Care's **#Move2026** challenge — an 8-week movement challenge to get everyone active! 🏃‍♂️\n\nYou log activities like runs, walks, gym sessions, yoga, and more to earn points. The goal is to build a healthy habit, cheer on your colleagues, and have fun moving together! 🌟\n\nAnything else you'd like to know?";
+        return "PaceTracker is Ginja AI's **#Move2026** challenge — an 8-week movement challenge to get everyone active! 🏃‍♂️\n\nYou log activities like runs, walks, gym sessions, yoga, and more to earn points. The goal is to build a healthy habit, cheer on your colleagues, and have fun moving together! 🌟\n\nAnything else you'd like to know?";
       case 'log_activity':
         return "Logging an activity is super easy!\n\n1️⃣ Click the **➕ Log Activity** tab\n2️⃣ Choose your activity type\n3️⃣ Pick the date\n4️⃣ Optionally add distance / duration\n5️⃣ In a challenge? Under **🏁 Is this for a challenge?** tap **Yes, count it 🎯** and pick it\n6️⃣ Hit **Log Activity** — done! ✅\n\n💡 Or just tap **📝 Log an activity for me** below and I'll walk you through it! 🦏";
       case 'log_challenge':
