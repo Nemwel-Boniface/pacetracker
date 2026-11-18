@@ -31,7 +31,7 @@ function buildLeadersMessage(active: MemberStats[], date: string, prizes: PrizeC
 
   return `🏆 *Move Together Leaderboard Update — ${fmtDateLong(date)}*
 
-Here's where we stand on the Eden Care #Move2026 challenge!
+Here's where we stand on the Ginja AI #Move2026 challenge!
 
 ${topLines}
 
@@ -235,7 +235,7 @@ export default function AdminLeaderboardPage() {
         <div style={{ background: 'linear-gradient(135deg,#145c38 0%,#1a7a4a 60%,#f26522 100%)', padding: '24px 24px 20px', color: 'white' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
             <div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Eden Care · #Move2026</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Ginja AI · #Move2026</div>
               <div style={{ fontSize: 24, fontWeight: 900 }}>Move Together Leaderboard</div>
             </div>
             <div style={{ textAlign: 'right' }}>
@@ -318,7 +318,7 @@ export default function AdminLeaderboardPage() {
             ))
           )}
           <div style={{ textAlign: 'center', fontSize: 10, color: '#d1d5db', marginTop: 8, paddingTop: 12, borderTop: '1px solid #f3f4f6' }}>
-            Consistency over intensity · Small steps, big difference · Eden Care #Move2026
+            Consistency over intensity · Small steps, big difference · Ginja AI #Move2026
           </div>
         </div>
       </div>

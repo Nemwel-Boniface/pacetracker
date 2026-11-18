@@ -99,7 +99,7 @@ function WelcomeMessage({ member, tempPassword, onDismiss }: { member: Member; t
   const platformUrl = typeof window !== 'undefined' ? window.location.origin : 'https://pacetracker.app';
   const message = `Hello ${member.name},
 
-You've been invited to PaceTracker – Eden Care's #Move2026 fitness challenge! 🏃‍♂️
+You've been invited to PaceTracker – Ginja AI's #Move2026 fitness challenge! 🏃‍♂️
 
 Sign in at: ${platformUrl}/authenticate
 Email: ${member.email}
@@ -273,7 +273,7 @@ export default function MembersPage() {
           <form onSubmit={handleCreate}>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:12,marginBottom:12}}>
               <div><label style={{display:'block',fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Full Name *</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Jane Wanjiku" required style={inp}/></div>
-              <div><label style={{display:'block',fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Email *</label><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="jane@edencaremedical.com" required style={inp}/></div>
+              <div><label style={{display:'block',fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Email *</label><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="jane@ginja.ai" required style={inp}/></div>
               <div><label style={{display:'block',fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Country</label>
                 <select value={form.country} onChange={e=>setForm({...form,country:e.target.value})} style={inp}>
                   {countries.map(c=><option key={c.name} value={c.name}>{c.flag} {c.name}</option>)}
