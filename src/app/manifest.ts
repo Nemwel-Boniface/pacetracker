@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: '/member',
     name: 'PaceTracker | #Move2026',
     short_name: 'PaceTracker',
-    description: 'Log your #Move2026 activities and follow the leaderboard',
+    description: 'Ginja AI #Move2026: log your activities and follow the leaderboard',
     // Opening the installed app goes straight to the member area; logged-out users are sent to sign in.
     start_url: '/member',
     scope: '/',

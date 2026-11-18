@@ -3,9 +3,12 @@ import './globals.css';
 import ChatBotProvider from './ChatBotProvider';
 import ServiceWorkerRegister from './ServiceWorkerRegister';
 import { Toaster } from 'sonner';
+const DESCRIPTION = 'Ginja AI #Move2026: an 8-week Couch to 10K challenge. Ginja AI builds AI that connects the care hospitals deliver to the revenue they earn.';
 export const metadata: Metadata = {
   title: 'PaceTracker | #Move2026 Challenge',
-  description: 'Eden Care #Move2026 – 8-Week Couch to 10K challenge leaderboard',
+  description: DESCRIPTION,
+  openGraph: { title: 'PaceTracker | #Move2026 Challenge', description: DESCRIPTION, siteName: 'PaceTracker by Ginja AI', type: 'website' },
+  twitter: { card: 'summary', title: 'PaceTracker | #Move2026 Challenge', description: DESCRIPTION },
   appleWebApp: { capable: true, title: 'PaceTracker', statusBarStyle: 'default' },
 };
 export const viewport: Viewport = { themeColor: '#145c38' };
