@@ -79,7 +79,7 @@ export default function LeaderboardPage() {
               <Link href="/how-it-works" style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, textDecoration: 'underline' }}>How points work</Link>
             </div>
           </div>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Eden Care · #Move2026</p>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Ginja AI · #Move2026</p>
           <h1 style={{ fontSize: 36, fontWeight: 900, margin: '0 0 4px' }}>Move Together</h1>
           <p style={{ color: 'rgba(255,255,255,0.7)', margin: '0 0 24px' }}>8-Week Couch to 10K · Leaderboard</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
@@ -264,7 +264,7 @@ export default function LeaderboardPage() {
           <Link href="/how-it-works" style={{ color: '#1a7a4a', fontWeight: 700, fontSize: 13 }}>Learn how points are earned →</Link>
         </div>
         <footer style={{ textAlign: 'center', marginTop: 32, paddingBottom: 24, fontSize: 11, color: '#d1d5db' }}>
-          © {new Date().getFullYear()} Eden Care · #Move2026 · Better Health, Stronger Together
+          © {new Date().getFullYear()} Ginja AI · #Move2026 · Better Health, Stronger Together
         </footer>
       </main>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

@@ -46,7 +46,7 @@ export default function TriviasGalleryPage() {
             </div>
             <Link href="/leaderboard" style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, textDecoration: 'underline' }}>← Leaderboard</Link>
           </div>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Eden Care · #Move2026</p>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Ginja AI · #Move2026</p>
           <h1 style={{ fontSize: 'clamp(26px,7vw,32px)', fontWeight: 900, margin: '0 0 4px' }}>🧩 Trivia Games</h1>
           <p style={{ color: 'rgba(255,255,255,0.7)', margin: 0, fontSize: 14 }}>Member-created live trivia — pick one and watch, or create your own from Challenges.</p>
         </div>
