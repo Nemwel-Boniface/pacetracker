@@ -45,7 +45,7 @@ export default function SantaShareCard({ name, gifting, giftedBy }: { name: stri
           {mutual ? `…and ${gifting} is gifting ${name.split(/\s+/)[0]} right back! 🤝` : giftedBy ? `${giftedBy} is gifting ${name.split(/\s+/)[0]} 🎁` : ''}
         </div>
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.25)', fontSize: 12, opacity: 0.85 }}>
-          Gift budget: up to KES {YEF_GIFT_BUDGET_KES.toLocaleString()} · Eden Care Year-End Function
+          Gift budget: up to KES {YEF_GIFT_BUDGET_KES.toLocaleString()} · Ginja AI Year-End Function
         </div>
       </div>
       <div style={{ textAlign: 'center', marginTop: 12 }}>

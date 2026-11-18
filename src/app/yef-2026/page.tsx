@@ -115,7 +115,7 @@ export default function Yef2026Page() {
         <div style={{ maxWidth: 640, margin: '0 auto' }}>
           <Link href="/leaderboard" style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, textDecoration: 'none' }}>← PaceTracker</Link>
           <h1 style={{ fontSize: 32, fontWeight: 900, margin: '16px 0 4px' }}>🎄 YEF 2026</h1>
-          <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0 }}>Eden Care Year-End Function: Secret Santa and Awards</p>
+          <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0 }}>Ginja AI Year-End Function: Secret Santa and Awards</p>
           <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
             {(['santa', 'awards'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 16px', borderRadius: 999, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', background: tab === t ? 'white' : 'rgba(255,255,255,0.15)', color: tab === t ? '#145c38' : 'white' }}>
