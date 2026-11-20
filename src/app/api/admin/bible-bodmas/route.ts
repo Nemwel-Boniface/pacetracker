@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
+import { getYefPeople } from '@/lib/yef';
 import {
   getBbGame, saveBbGame, publishBbUpdate, nextUpPreview, setPhase, nominateLeader, startRound, resolveRound,
-  cancelRound, resetGame, setTimer, addMember, removeMember, BbGame, BbTeamId, BbPhase, BbOutcome, BbCategory,
+  cancelRound, resetGame, setTimer, addMember, removeMember, loadTeams, BbGame, BbTeamId, BbPhase, BbOutcome, BbCategory,
 } from '@/lib/bibleBodmas';
 
 export async function GET() {
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
       case 'cancel': game = cancelRound(g); break;
       case 'reset': game = resetGame(g); break;
       case 'timer': game = setTimer(g, body.category!, Number(body.seconds)); break;
+      case 'loadYefTeams': game = loadTeams(g, await getYefPeople()); break;
       case 'addMember':
         if (!body.teamId || !body.name?.trim()) throw new Error('Team and name are required');
         game = addMember(g, body.teamId, body.name.trim()); break;

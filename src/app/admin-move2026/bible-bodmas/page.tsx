@@ -84,6 +84,7 @@ export default function AdminBibleBodmasPage() {
   const [tiebreakTeam, setTiebreakTeam] = useState<TeamId | ''>('');
   const [newMemberName, setNewMemberName] = useState<Record<TeamId, string>>({ simba: '', kifaru: '', chui: '' });
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [splitConfirm, setSplitConfirm] = useState(false);
   const [timerInput, setTimerInput] = useState<Record<Category, string>>({ bible: '30', math: '45' });
 
   const apply = useCallback((data: { game: Game; nextUp: NextUp | null }) => {
@@ -273,6 +274,22 @@ export default function AdminBibleBodmasPage() {
             </form>
           </div>
         ))}
+      </div>
+
+      {/* Teams from YEF */}
+      <div style={{ ...card, marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#1f2937' }}>Split YEF people into teams</div>
+          <div style={{ fontSize: 12, color: '#9ca3af' }}>Replaces all three rosters with a fresh, department-balanced split of the YEF list. Scores stay.</div>
+        </div>
+        {splitConfirm ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button disabled={busy || !!current} onClick={() => { act('loadYefTeams'); setSplitConfirm(false); }} style={{ ...btn, background: '#f26522', color: 'white' }}>Confirm split</button>
+            <button onClick={() => setSplitConfirm(false)} style={{ ...btn, background: '#f3f4f6', color: '#374151' }}>Cancel</button>
+          </div>
+        ) : (
+          <button disabled={!!current} onClick={() => setSplitConfirm(true)} style={{ ...btn, background: '#fff7ed', color: '#c2410c' }}>🔀 Re-split teams</button>
+        )}
       </div>
 
       {/* Reset */}

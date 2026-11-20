@@ -1,5 +1,6 @@
-import { getRedis, KEYS } from './redis';
+import { getRedis } from './redis';
 import { v4 as uuidv4 } from 'uuid';
+import { getYefPeople } from './yef';
 
 // Bible & BODMAS: a live team trivia that mirrors Methali Trivia (one Redis doc, SSE push, host-scored),
 // but each question goes to one nominated "round leader" per team, and rounds alternate Bible / Math.
@@ -136,13 +137,26 @@ function buildQuestions() {
   return { questionsById, testQueue, mainQueue, tiebreakQuestions };
 }
 
-// Teams start with the same rosters people had in Methali Trivia. Read-only: the Methali doc is never written.
+// Splits the YEF people list into the three teams: same size (give or take one), and each department
+// dealt across the teams in turn so no team ends up stacked with one department.
+export function teamsFromPeople(people: { name: string; department: string }[]): BbTeam[] {
+  const shuffled = [...people];
+  for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
+  const byDept = new Map<string, string[]>();
+  shuffled.forEach(p => { const k = p.department.trim().toLowerCase(); byDept.set(k, [...(byDept.get(k) ?? []), p.name]); });
+  const teams: BbTeam[] = TEAM_META.map(t => ({ ...t, score: 0, members: [] }));
+  let turn = Math.floor(Math.random() * teams.length);
+  [...byDept.values()].sort((a, b) => b.length - a.length).flat().forEach(name => {
+    const smallest = Math.min(...teams.map(t => t.members.length));
+    while (teams[turn % teams.length].members.length !== smallest) turn++;
+    teams[turn % teams.length].members.push({ id: uuidv4(), name });
+    turn++;
+  });
+  return teams;
+}
+
 async function seedTeams(): Promise<BbTeam[]> {
-  const methali = await getRedis().get<{ teams?: { id: string; members?: { name: string }[] }[] }>(KEYS.methali);
-  return TEAM_META.map(t => ({
-    ...t, score: 0,
-    members: (methali?.teams?.find(m => m.id === t.id)?.members ?? []).map(m => ({ id: uuidv4(), name: m.name })),
-  }));
+  return teamsFromPeople(await getYefPeople());
 }
 
 function freshGame(teams: BbTeam[], timers: Record<BbCategory, number>): BbGame {
@@ -309,6 +323,14 @@ export function setTimer(g: BbGame, category: BbCategory, seconds: number): BbGa
 
 export function resetGame(g: BbGame): BbGame {
   return freshGame(g.teams.map(t => ({ ...t, score: 0 })), g.timers);
+}
+
+// Replaces every roster with a fresh split of the YEF list. Scores stay as they are.
+export function loadTeams(g: BbGame, people: { name: string; department: string }[]): BbGame {
+  if (g.current) throw new Error('Resolve the round in progress before changing teams');
+  if (people.length === 0) throw new Error('The YEF people list is empty');
+  const fresh = teamsFromPeople(people);
+  return { ...g, pendingLeader: null, teams: g.teams.map(t => ({ ...t, members: fresh.find(f => f.id === t.id)!.members })) };
 }
 
 export function addMember(g: BbGame, teamId: BbTeamId, name: string): BbGame {
