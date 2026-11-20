@@ -12,6 +12,7 @@ const NAV = [
   { href: '/admin-move2026/prizes', label: '🎁 Prizes' },
   { href: '/admin-move2026/winners', label: '🥇 Winners' },
   { href: '/admin-move2026/yef', label: '🎄 YEF 2026' },
+  { href: '/admin-move2026/bible-bodmas', label: '📖 Bible & BODMAS' },
   { href: '/admin-move2026/feedback', label: '📬 Feedback' },
   { href: '/admin-move2026/settings', label: '⚙️ Settings' },
 ];
